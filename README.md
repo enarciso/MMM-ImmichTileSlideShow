@@ -24,19 +24,19 @@ No dependencies are required to render placeholders. To integrate Immich later, 
 
 ## Configuration
 
-Add this module to your `config/config.js`:
+Add this module to your `config/config.js`. No position is required; the module mounts to the built-in `fullscreen_below` region automatically and acts as a background behind other modules:
 
 ```js
 {
   module: "MMM-ImmichTileSlideShow",
-  position: "top_left", // Any region works; grid scales to container
+  // no position needed; module renders fullscreen background
   header: "Immich Tile Slideshow",
   config: {
-    // Grid
-    tileRows: 2,
-    tileCols: 3,
+    // Mosaic grid (auto-scaled by viewport)
+    tileRows: 2,           // initial hint for tile count; actual layout is responsive
+    tileCols: 3,           // initial hint for tile count; actual layout is responsive
     tileGapPx: 8,
-    imageFit: "cover", // cover | contain
+    imageFit: "cover",     // cover | contain
 
     // Rotation
     updateInterval: 10000,

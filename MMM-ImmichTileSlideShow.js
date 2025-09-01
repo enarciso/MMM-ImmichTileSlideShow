@@ -91,6 +91,9 @@ Module.register("MMM-ImmichTileSlideShow", {
       identifier: this.identifier,
       config: this.config
     });
+
+    // Mount to fullscreen background region regardless of module position
+    this._ensureRoot();
   },
 
   /**
@@ -98,33 +101,10 @@ Module.register("MMM-ImmichTileSlideShow", {
    * @returns {HTMLElement}
    */
   getDom() {
-    const wrapper = document.createElement("div");
-    wrapper.className = "immich-tiles-wrapper";
-
-    // Apply CSS grid variables
-    wrapper.style.setProperty("--mmmitss-rows", String(this.config.tileRows));
-    wrapper.style.setProperty("--mmmitss-cols", String(this.config.tileCols));
-    wrapper.style.setProperty("--mmmitss-gap", `${this.config.tileGapPx}px`);
-    wrapper.style.setProperty("--mmmitss-bg", this.config.backgroundColor);
-    wrapper.style.setProperty("--mmmitss-fit", this.config.imageFit);
-    wrapper.style.setProperty("--mmmitss-transition", `${this.config.transitionDurationMs}ms`);
-    wrapper.classList.toggle("transition-fade", (this.config.transition || "fade") === "fade");
-    wrapper.classList.toggle("transition-slide", (this.config.transition || "fade") === "slide");
-
-    // Provide a sensible default height for non-fullscreen placements
-    const h = Number(this.config.containerHeightPx || 0);
-    if (h > 0) wrapper.style.height = `${h}px`;
-
-    // Create tiles (empty until data arrives)
-    const total = this.config.tileRows * this.config.tileCols;
-    this.tileEls = [];
-    for (let i = 0; i < total; i++) {
-      const tile = this._createTile();
-      wrapper.appendChild(tile);
-      this.tileEls.push(tile);
-    }
-    this._container = wrapper;
-    return wrapper;
+    // We mount our UI into the fullscreen_below region directly. Return an invisible stub.
+    const stub = document.createElement("div");
+    stub.style.display = "none";
+    return stub;
   },
 
   /**
@@ -159,6 +139,41 @@ Module.register("MMM-ImmichTileSlideShow", {
     tile.appendChild(caption);
 
     return tile;
+  },
+
+  /**
+   * Ensure fullscreen root is created and contains the grid wrapper and tiles.
+   */
+  _ensureRoot() {
+    if (this._root) return;
+    const container = document.querySelector('.region.fullscreen.below .container') || document.body;
+    const root = document.createElement('div');
+    root.className = 'immich-tiles-root';
+    root.style.pointerEvents = 'none';
+
+    // Grid wrapper inside root
+    const wrapper = document.createElement('div');
+    wrapper.className = 'immich-tiles-wrapper';
+    wrapper.style.setProperty("--mmmitss-gap", `${this.config.tileGapPx}px`);
+    wrapper.style.setProperty("--mmmitss-bg", this.config.backgroundColor);
+    wrapper.style.setProperty("--mmmitss-fit", this.config.imageFit);
+    wrapper.style.setProperty("--mmmitss-transition", `${this.config.transitionDurationMs}ms`);
+    wrapper.classList.toggle("transition-fade", (this.config.transition || "fade") === "fade");
+    wrapper.classList.toggle("transition-slide", (this.config.transition || "fade") === "slide");
+
+    this.tileEls = [];
+    // Start with a modest number of tiles; we will keep rotating content
+    const initialTiles = Math.max(12, this.config.tileRows * this.config.tileCols) || 12;
+    for (let i = 0; i < initialTiles; i++) {
+      const tile = this._createTile();
+      wrapper.appendChild(tile);
+      this.tileEls.push(tile);
+    }
+
+    root.appendChild(wrapper);
+    container.appendChild(root);
+    this._root = root;
+    this._container = wrapper;
   },
 
   /**
@@ -241,6 +256,9 @@ Module.register("MMM-ImmichTileSlideShow", {
       tile.classList.add("swap");
       setTimeout(() => tile.classList.remove("swap"), Math.max(200, this.config.transitionDurationMs));
     }
+
+    // Adjust mosaic spans by orientation
+    this._applyMosaicSpans(tile, image.src);
   },
 
   /**
@@ -301,5 +319,37 @@ Module.register("MMM-ImmichTileSlideShow", {
     } catch (_) {
       return "";
     }
+  },
+
+  /**
+   * Determine image orientation and set grid row/column spans accordingly.
+   * @param {HTMLDivElement} tile
+   * @param {string} src
+   */
+  _applyMosaicSpans(tile, src) {
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth || img.width;
+      const h = img.naturalHeight || img.height;
+      if (!w || !h) return;
+      const ratio = w / h;
+      let colSpan = 1;
+      let rowSpan = 1;
+      if (ratio >= 2.0) { // panorama
+        colSpan = 3; rowSpan = 1;
+      } else if (ratio >= 1.3) { // landscape
+        colSpan = 2; rowSpan = 1;
+      } else if (ratio <= 0.5) { // very tall
+        colSpan = 1; rowSpan = 3;
+      } else if (ratio <= 0.8) { // portrait
+        colSpan = 1; rowSpan = 2;
+      } else { // near square
+        colSpan = 1; rowSpan = 1;
+      }
+      tile.style.gridColumn = `span ${colSpan}`;
+      tile.style.gridRow = `span ${rowSpan}`;
+      tile.dataset.ratio = String(ratio);
+    };
+    img.src = src;
   }
 });
