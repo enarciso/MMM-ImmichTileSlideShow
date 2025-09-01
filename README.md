@@ -91,6 +91,7 @@ Add this module to your `config/config.js`. No position is required; the module 
 
     // Optional: Video support (experimental)
     // enableVideos: true,            // default: false
+    // imageVideoRatio: "4:1",        // images:videos selection ratio
     // videoMaxConcurrent: 1,         // play at most N videos at once
     // videoAutoplay: true,
     // videoMuted: true,
@@ -125,6 +126,7 @@ See `examples/config.example.js` for another snippet.
 | `featuredCenterBand` | number | `0.5` | Center band (fraction or percent) where featured tiles are placed. Accepts `0–1` or `0–100`; values closer to 1 widen the center band. |
 | `validImageFileExtensions` | string | `"jpg,jpeg,png,gif,webp,heic"` | Filter by allowed extensions (server-side). |
 | `enableVideos` | boolean | `false` | Allow Immich video assets to appear as tiles. |
+| `imageVideoRatio` | string/number | `"4:1"` | Deterministic cadence of images vs. videos (images:videos). Pattern repeats (e.g., `image,image,image,image,video`). Accepts `"4:1"` or a number `4` (interpreted as `4:1`). |
 | `validVideoFileExtensions` | string | `"mp4,mov,m4v,webm,avi,mkv,3gp"` | Video extensions to include (server-side). |
 | `videoMaxConcurrent` | number | `1` | Maximum number of simultaneously playing videos. |
 | `videoAutoplay` | boolean | `true` | Autoplay videos if allowed by browser policy. |

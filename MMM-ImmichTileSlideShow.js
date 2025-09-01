@@ -57,6 +57,7 @@ Module.register("MMM-ImmichTileSlideShow", {
     validImageFileExtensions: "jpg,jpeg,png,gif,webp,heic",
     validVideoFileExtensions: "mp4,mov,m4v,webm,avi,mkv,3gp",
     enableVideos: false,
+    imageVideoRatio: "4:1", // images:videos selection ratio
     videoAutoplay: true,
     videoMuted: true,
     videoLoop: true,
@@ -105,8 +106,13 @@ Module.register("MMM-ImmichTileSlideShow", {
     this._rotationTimer = null;
     this._featuredTimer = null;
     this._nextImageIndex = 0;
+    this._nextVideoIndex = 0;
     this._started = false;
     this._activeVideoCount = 0;
+    this._imagePool = [];
+    this._videoPool = [];
+    this._cadenceIndex = 0;
+    this._cadenceSeq = null;
 
     this.log("started with config", this.config);
 
@@ -147,10 +153,13 @@ Module.register("MMM-ImmichTileSlideShow", {
     if (notification === "IMMICH_TILES_DATA" && payload && Array.isArray(payload.images)) {
       this.log("received images:", payload.images.length);
       this.images = payload.images;
+      this._splitMedia();
+      this._cadenceIndex = 0;
+      this._cadenceSeq = null;
       this._fillTilesInitial();
       this._startRotation();
       this._started = true;
-      this._setDebugText(`images: ${this.images.length}`);
+      this._setDebugText(`media: ${this._imagePool.length} img, ${this._videoPool.length} vid`);
     }
   },
 
@@ -301,10 +310,74 @@ Module.register("MMM-ImmichTileSlideShow", {
    * @returns {TileImage}
    */
   _nextImage() {
-    if (!this.images || this.images.length === 0) return this._placeholderImage(0);
-    const img = this.images[this._nextImageIndex % this.images.length];
-    this._nextImageIndex = (this._nextImageIndex + 1) % this.images.length;
-    return img;
+    // media-aware selection using image:video ratio
+    const hasImages = this._imagePool && this._imagePool.length > 0;
+    const hasVideos = this._videoPool && this._videoPool.length > 0 && this.config.enableVideos;
+    if (!hasImages && !hasVideos) return this._placeholderImage(0);
+    const kind = this._selectMediaKind();
+    if (kind === 'video' && hasVideos) {
+      const v = this._videoPool[this._nextVideoIndex % this._videoPool.length];
+      this._nextVideoIndex = (this._nextVideoIndex + 1) % this._videoPool.length;
+      return v;
+    }
+    if (hasImages) {
+      const im = this._imagePool[this._nextImageIndex % this._imagePool.length];
+      this._nextImageIndex = (this._nextImageIndex + 1) % this._imagePool.length;
+      return im;
+    }
+    // fallback to videos if no images
+    const v = this._videoPool[this._nextVideoIndex % this._videoPool.length];
+    this._nextVideoIndex = (this._nextVideoIndex + 1) % this._videoPool.length;
+    return v;
+  },
+
+  _splitMedia() {
+    this._imagePool = [];
+    this._videoPool = [];
+    for (const m of this.images || []) {
+      const k = (m && m.kind) || 'image';
+      if (k === 'video') this._videoPool.push(m);
+      else this._imagePool.push(m);
+    }
+  },
+
+  _parseImageVideoRatio() {
+    const r = this.config.imageVideoRatio;
+    let img = 4, vid = 1;
+    if (typeof r === 'string' && r.includes(':')) {
+      const parts = r.split(':');
+      const a = Math.max(0, parseInt(String(parts[0]).trim(), 10) || 0);
+      const b = Math.max(0, parseInt(String(parts[1]).trim(), 10) || 0);
+      if (a > 0) img = a;
+      if (b > 0) vid = b;
+    } else if (typeof r === 'number' && isFinite(r) && r >= 0) {
+      img = Math.floor(r) || 0;
+      vid = 1;
+    }
+    if (img === 0 && vid === 0) { img = 1; vid = 0; }
+    return { image: img, video: vid };
+  },
+
+  _selectMediaKind() {
+    if (!this.config.enableVideos || !this._videoPool || this._videoPool.length === 0) return 'image';
+    if (!this._imagePool || this._imagePool.length === 0) return 'video';
+    const w = this._parseImageVideoRatio();
+    const total = (w.image || 0) + (w.video || 0);
+    if (total <= 0) return 'image';
+    // Build/update deterministic sequence based on ratio (e.g., ['image','image','image','image','video'])
+    const needsSeq = !this._cadenceSeq || this._cadenceSeq.length !== total || this._cadenceSeqImage !== w.image || this._cadenceSeqVideo !== w.video;
+    if (needsSeq) {
+      const seq = [];
+      for (let i = 0; i < w.image; i++) seq.push('image');
+      for (let i = 0; i < w.video; i++) seq.push('video');
+      this._cadenceSeq = seq;
+      this._cadenceSeqImage = w.image;
+      this._cadenceSeqVideo = w.video;
+      this._cadenceIndex = 0;
+    }
+    const choice = this._cadenceSeq[this._cadenceIndex % this._cadenceSeq.length];
+    this._cadenceIndex = (this._cadenceIndex + 1) % this._cadenceSeq.length;
+    return choice;
   },
 
   /**
