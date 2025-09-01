@@ -94,6 +94,13 @@ Module.register("MMM-ImmichTileSlideShow", {
 
     // Mount to fullscreen background region regardless of module position
     this._ensureRoot();
+
+    // Show placeholders immediately to avoid a blank screen
+    if (!this.images || this.images.length === 0) {
+      this._fillTilesInitial();
+      this._startRotation();
+      this._setDebugText('waiting for data');
+    }
   },
 
   /**
@@ -119,6 +126,7 @@ Module.register("MMM-ImmichTileSlideShow", {
       this._fillTilesInitial();
       this._startRotation();
       this._started = true;
+      this._setDebugText(`images: ${this.images.length}`);
     }
   },
 
@@ -147,6 +155,11 @@ Module.register("MMM-ImmichTileSlideShow", {
   _ensureRoot() {
     if (this._root) return;
     const container = document.querySelector('.region.fullscreen.below .container') || document.body;
+    this.log('mount target found?', !!container);
+    if (container && container.classList) {
+      container.classList.remove('hidden');
+      container.style.display = '';
+    }
     const root = document.createElement('div');
     root.className = 'immich-tiles-root';
     root.style.pointerEvents = 'none';
@@ -160,6 +173,7 @@ Module.register("MMM-ImmichTileSlideShow", {
     wrapper.style.setProperty("--mmmitss-transition", `${this.config.transitionDurationMs}ms`);
     wrapper.classList.toggle("transition-fade", (this.config.transition || "fade") === "fade");
     wrapper.classList.toggle("transition-slide", (this.config.transition || "fade") === "slide");
+    if (this.config.debug) wrapper.classList.add('debug');
 
     this.tileEls = [];
     // Start with a modest number of tiles; we will keep rotating content
@@ -171,15 +185,22 @@ Module.register("MMM-ImmichTileSlideShow", {
     }
 
     root.appendChild(wrapper);
+    // Optional debug label
+    const dbg = document.createElement('div');
+    dbg.className = 'immich-tiles-debug';
+    dbg.style.cssText = 'position:absolute;left:8px;bottom:8px;color:#8bc34a;font:12px/1.2 monospace;background:rgba(0,0,0,.35);padding:4px 6px;border-radius:4px;display:none;';
+    root.appendChild(dbg);
     container.appendChild(root);
     this._root = root;
     this._container = wrapper;
+    this.log('created root and tiles:', this.tileEls.length);
   },
 
   /**
    * Populate the grid once with a staggered effect.
    */
   _fillTilesInitial() {
+    this.log('filling initial tiles, current images:', this.images && this.images.length);
     const usePlaceholders = !this.images || this.images.length === 0;
     const total = this.tileEls.length;
     for (let i = 0; i < total; i++) {
@@ -187,6 +208,7 @@ Module.register("MMM-ImmichTileSlideShow", {
       const delay = i * (this.config.initialStaggerMs || 0);
       setTimeout(() => {
         const img = usePlaceholders ? this._placeholderImage(i) : this._nextImage();
+        this.log('apply initial tile', i, 'placeholder?', usePlaceholders);
         this._applyTile(tile, img);
       }, delay);
     }
@@ -202,6 +224,7 @@ Module.register("MMM-ImmichTileSlideShow", {
       const index = this.config.randomizeTiles
         ? Math.floor(Math.random() * this.tileEls.length)
         : (Date.now() / this.config.updateInterval) % this.tileEls.length;
+      this.log('rotating tile index', index);
       const tile = this.tileEls[index];
       const img = this.images && this.images.length ? this._nextImage() : this._placeholderImage(index);
       this._applyTile(tile, img, true);
@@ -287,6 +310,17 @@ Module.register("MMM-ImmichTileSlideShow", {
    */
   stop() {
     if (this._rotationTimer) clearInterval(this._rotationTimer);
+  },
+
+  _setDebugText(text) {
+    const el = this._root && this._root.querySelector('.immich-tiles-debug');
+    if (!el) return;
+    if (this.config.debug) {
+      el.textContent = `MMM-ImmichTileSlideShow · ${text}`;
+      el.style.display = 'block';
+    } else {
+      el.style.display = 'none';
+    }
   }
   ,
 

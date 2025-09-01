@@ -27,6 +27,10 @@
   overflow: hidden;
 }
 
+.immich-tiles-wrapper.debug .immich-tile {
+  outline: 1px dashed rgba(255,255,255,0.2);
+}
+
 .immich-tile {
   position: relative;
   border-radius: 6px;

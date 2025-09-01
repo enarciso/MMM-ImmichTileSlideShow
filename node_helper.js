@@ -14,6 +14,14 @@ const path = require("path");
 
 const LOG_PREFIX = "MMM-ImmichTileSlideShow :: helper :: ";
 
+function dlog(ctx, ...args) {
+  if (ctx && ctx.config && ctx.config.debug) {
+    Log.info(LOG_PREFIX + "[debug]", ...args);
+  } else {
+    Log.debug(LOG_PREFIX, ...args);
+  }
+}
+
 /**
  * @typedef {Object} TileImage
  * @property {string} src
@@ -37,6 +45,17 @@ module.exports = NodeHelper.create({
     if (notification === "IMMICH_TILES_REGISTER") {
       this.config = payload && payload.config ? payload.config : {};
       Log.info(LOG_PREFIX + "register received");
+      const cfg = this.config || {};
+      const immichCfg = (cfg.immichConfigs && cfg.immichConfigs[cfg.activeImmichConfigIndex || 0]) || {};
+      dlog(this, "incoming config", {
+        mode: immichCfg.mode,
+        url: immichCfg.url,
+        hasApiKey: !!immichCfg.apiKey,
+        timeout: immichCfg.timeout,
+        albumName: immichCfg.albumName,
+        albumId: immichCfg.albumId,
+        querySize: immichCfg.querySize
+      });
       if (Array.isArray(this.config.immichConfigs) && this.config.immichConfigs.length > 0) {
         _loadFromImmichImpl(this).catch((e) => {
           Log.error(LOG_PREFIX + "Immich load failed: " + e.message);
@@ -144,6 +163,14 @@ async function _loadFromImmichImpl(context) {
   // Lazy-require the API dep only when needed
   const immichApi = require('./immichApi.js');
   const cfg = normalizeImmichConfig(context.config);
+  dlog(context, 'normalized active config', {
+    mode: cfg.mode,
+    url: cfg.url,
+    timeout: cfg.timeout,
+    albumName: cfg.albumName,
+    albumId: cfg.albumId,
+    querySize: cfg.querySize
+  });
 
   // Build valid extensions set
   const validSet = new Set(
@@ -154,7 +181,10 @@ async function _loadFromImmichImpl(context) {
       .filter(Boolean)
   );
 
+  // toggle immichApi debug passthrough
+  immichApi.debugOn = !!(context.config && context.config.debug);
   await immichApi.init(cfg, context.expressApp, true);
+  dlog(context, 'api level resolved', immichApi.apiLevel);
 
   let images = [];
   if (cfg.mode === 'album') {
@@ -162,10 +192,12 @@ async function _loadFromImmichImpl(context) {
     if (cfg.albumName && !cfg.albumId) {
       const names = Array.isArray(cfg.albumName) ? cfg.albumName : [cfg.albumName];
       albumIds = await immichApi.findAlbumIds(names);
+      dlog(context, 'findAlbumIds', names, '=>', albumIds);
     }
     if (albumIds) {
       albumIds = Array.isArray(albumIds) ? albumIds : [albumIds];
       images = await immichApi.getAlbumAssetsForAlbumIds(albumIds);
+      dlog(context, 'album assets count', images && images.length);
     } else {
       Log.error(LOG_PREFIX + 'Album mode specified but no album found/selected.');
       // Try to help the user by listing available albums
@@ -184,8 +216,10 @@ async function _loadFromImmichImpl(context) {
     }
   } else if (cfg.mode === 'search') {
     images = await immichApi.searchAssets(cfg.query, cfg.querySize);
+    dlog(context, 'search assets count', images && images.length);
   } else if (cfg.mode === 'random') {
     images = await immichApi.randomSearchAssets(cfg.querySize, cfg.query);
+    dlog(context, 'random assets count', images && images.length);
   } else if (cfg.mode === 'anniversary') {
     images = await immichApi.anniversarySearchAssets(
       cfg.anniversaryDatesBack,
@@ -195,18 +229,24 @@ async function _loadFromImmichImpl(context) {
       cfg.querySize,
       cfg.query
     );
+    dlog(context, 'anniversary assets count', images && images.length);
   } else {
     // memory lane (default)
     images = await immichApi.getMemoryLaneAssets(cfg.numDaysToInclude);
+    dlog(context, 'memory lane assets count', images && images.length);
   }
 
   // Filter by extension
   if (images && images.length) {
+    const before = images.length;
     images = images.filter((img) => hasValidExt(img.originalPath || img.originalFileName || '', validSet));
+    const after = images.length;
+    dlog(context, `filter by ext (${before} -> ${after})`);
   }
 
   // Map to tile images
   let tiles = (images || []).map((img) => toTileImage(img, immichApi));
+  dlog(context, 'mapped tiles', tiles && tiles.length);
 
   // Sort
   switch (cfg.sortImagesBy) {
@@ -227,6 +267,7 @@ async function _loadFromImmichImpl(context) {
       break;
   }
   if (cfg.sortImagesDescending === true) tiles.reverse();
+  dlog(context, 'sorted tiles', cfg.sortImagesBy, 'descending?', cfg.sortImagesDescending, 'count', tiles && tiles.length);
 
   // Send to client
   Log.info(LOG_PREFIX + `Loaded ${tiles.length} image(s) for mode=${cfg.mode}`);

@@ -9,6 +9,7 @@ const LOG_PREFIX = 'MMM-ImmichTileSlideShow :: immichApi :: ';
 const IMMICH_PROXY_URL = '/immichtilesslideshow/';
 
 const immichApi = {
+  debugOn: false,
   apiUrls: {
     v1_94: {
       albums: '/album',
@@ -113,6 +114,7 @@ const immichApi = {
       }
 
       // Proxy for image thumbnails via MagicMirror
+      if (this.debugOn) Log.info(LOG_PREFIX + '[debug] setting up proxy at ' + IMMICH_PROXY_URL);
       expressApp.use(
         IMMICH_PROXY_URL,
         createProxyMiddleware({
@@ -130,7 +132,8 @@ const immichApi = {
           }
         })
       );
-      Log.debug(LOG_PREFIX + 'Server API level -> ' + this.apiLevel);
+      if (this.debugOn) Log.info(LOG_PREFIX + '[debug] Server API level -> ' + this.apiLevel);
+      else Log.debug(LOG_PREFIX + 'Server API level -> ' + this.apiLevel);
     }
   },
 
@@ -139,6 +142,7 @@ const immichApi = {
     try {
       const response = await this.http.get(this.apiUrls[this.apiLevel].albums, { responseType: 'json' });
       if (response.status === 200) {
+        if (this.debugOn) Log.info(LOG_PREFIX + `[debug] albums received: ${response.data.length}`);
         for (const album of response.data) {
           map.set(album.albumName, album.id);
         }
@@ -170,6 +174,7 @@ const immichApi = {
         if (response.data.albumName) {
           images.forEach((img) => (img.albumName = response.data.albumName));
         }
+        if (this.debugOn) Log.info(LOG_PREFIX + `[debug] album ${albumId} assets: ${images.length}`);
       } else {
         Log.error(LOG_PREFIX + 'unexpected response (albumInfo)', response.status, response.statusText);
       }
@@ -201,6 +206,7 @@ const immichApi = {
         const response = await this.http.get(this.apiUrls[this.apiLevel].memoryLane, { params, responseType: 'json' });
         if (response.status === 200) {
           response.data.forEach((m) => (images = m.assets.concat(images)));
+          if (this.debugOn) Log.info(LOG_PREFIX + `[debug] memory lane day ${today.toISOString()} count: ${response.data.length}`);
         } else {
           Log.error(LOG_PREFIX + 'unexpected response (memoryLane)', response.status, response.statusText);
         }
@@ -216,8 +222,9 @@ const immichApi = {
     let images = [];
     try {
       const body = { ...(query || {}), size: size || 100 };
+      if (this.debugOn) Log.info(LOG_PREFIX + '[debug] search body ' + JSON.stringify(body));
       const response = await this.http.post(this.apiUrls[this.apiLevel].search, body, { responseType: 'json' });
-      if (response.status === 200) images = response.data.assets.items;
+      if (response.status === 200) images = response.data.assets?.items || response.data.items || response.data || [];
       else Log.error(LOG_PREFIX + 'unexpected response (search)', response.status, response.statusText);
     } catch (e) {
       Log.error(LOG_PREFIX + 'Exception (search)', e.message);
@@ -229,6 +236,7 @@ const immichApi = {
     let images = [];
     try {
       const body = { size: size || 100, ...(query || {}) };
+      if (this.debugOn) Log.info(LOG_PREFIX + '[debug] random body ' + JSON.stringify(body));
       const response = await this.http.post(this.apiUrls[this.apiLevel].randomSearch, body, { responseType: 'json' });
       if (response.status === 200) images = response.data || [];
       else Log.error(LOG_PREFIX + 'unexpected response (random)', response.status, response.statusText);
@@ -315,4 +323,3 @@ const immichApi = {
 };
 
 module.exports = immichApi;
-
