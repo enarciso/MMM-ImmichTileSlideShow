@@ -31,7 +31,7 @@ const immichApi = {
       assetDownload: '/assets/{id}/thumbnail?size=preview',
       serverInfoUrl: '/server-info/version',
       search: 'NOT SUPPORTED',
-      videoStream: '/assets/{id}/video'
+      videoStream: '/assets/{id}/original'
     },
     v1_118: {
       previousVersion: 'v1_106',
@@ -42,7 +42,7 @@ const immichApi = {
       assetDownload: '/assets/{id}/thumbnail?size=preview',
       serverInfoUrl: '/server/version',
       search: '/search/smart',
-      videoStream: '/assets/{id}/video'
+      videoStream: '/assets/{id}/original'
     },
     v1_133: {
       previousVersion: 'v1_118',
@@ -54,7 +54,7 @@ const immichApi = {
       serverInfoUrl: '/server/version',
       search: '/search/smart',
       randomSearch: '/search/random',
-      videoStream: '/assets/{id}/video'
+      videoStream: '/assets/{id}/original'
     }
   },
 
@@ -147,10 +147,10 @@ const immichApi = {
             target: config.url,
             changeOrigin: true,
             proxyTimeout: config.timeout || 6000,
-            headers: {
-              'x-api-key': config.apiKey,
-              accept: 'video/*'
-            },
+          headers: {
+            'x-api-key': config.apiKey,
+            accept: '*/*'
+          },
             pathRewrite: (path) => {
               const parts = path.split('/');
               const assetId = parts[parts.length - 1];
