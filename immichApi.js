@@ -7,6 +7,7 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const LOG_PREFIX = 'MMM-ImmichTileSlideShow :: immichApi :: ';
 const IMMICH_PROXY_URL = '/immichtilesslideshow/';
+const IMMICH_VIDEO_PROXY_URL = '/immichtilesslideshow-video/';
 
 const immichApi = {
   debugOn: false,
@@ -18,7 +19,8 @@ const immichApi = {
       assetInfo: '/asset/{id}',
       assetDownload: '/asset/file/{id}?isWeb=true',
       serverInfoUrl: '/server-info/version',
-      search: 'NOT SUPPORTED'
+      search: 'NOT SUPPORTED',
+      videoStream: '/asset/file/{id}?isWeb=true'
     },
     v1_106: {
       previousVersion: 'v1_94',
@@ -28,7 +30,8 @@ const immichApi = {
       assetInfo: '/assets/{id}',
       assetDownload: '/assets/{id}/thumbnail?size=preview',
       serverInfoUrl: '/server-info/version',
-      search: 'NOT SUPPORTED'
+      search: 'NOT SUPPORTED',
+      videoStream: '/assets/{id}/original'
     },
     v1_118: {
       previousVersion: 'v1_106',
@@ -38,7 +41,8 @@ const immichApi = {
       assetInfo: '/assets/{id}',
       assetDownload: '/assets/{id}/thumbnail?size=preview',
       serverInfoUrl: '/server/version',
-      search: '/search/smart'
+      search: '/search/smart',
+      videoStream: '/assets/{id}/original'
     },
     v1_133: {
       previousVersion: 'v1_118',
@@ -49,7 +53,8 @@ const immichApi = {
       assetDownload: '/assets/{id}/thumbnail?size=preview',
       serverInfoUrl: '/server/version',
       search: '/search/smart',
-      randomSearch: '/search/random'
+      randomSearch: '/search/random',
+      videoStream: '/assets/{id}/original'
     }
   },
 
@@ -132,6 +137,29 @@ const immichApi = {
           }
         })
       );
+
+      // Proxy for video streaming via MagicMirror
+      if (!this._videoProxySetup) {
+        if (this.debugOn) Log.info(LOG_PREFIX + '[debug] setting up video proxy at ' + IMMICH_VIDEO_PROXY_URL);
+        expressApp.use(
+          IMMICH_VIDEO_PROXY_URL,
+          createProxyMiddleware({
+            target: config.url,
+            changeOrigin: true,
+            proxyTimeout: config.timeout || 6000,
+          headers: {
+            'x-api-key': config.apiKey,
+            accept: '*/*'
+          },
+            pathRewrite: (path) => {
+              const parts = path.split('/');
+              const assetId = parts[parts.length - 1];
+              return this.apiBaseUrl + this.apiUrls[this.apiLevel].videoStream.replace('{id}', assetId);
+            }
+          })
+        );
+        this._videoProxySetup = true;
+      }
       if (this.debugOn) Log.info(LOG_PREFIX + '[debug] Server API level -> ' + this.apiLevel);
       else Log.debug(LOG_PREFIX + 'Server API level -> ' + this.apiLevel);
     }
@@ -319,6 +347,10 @@ const immichApi = {
 
   getImageLink: function (imageId) {
     return IMMICH_PROXY_URL + imageId;
+  },
+
+  getVideoLink: function (imageId) {
+    return IMMICH_VIDEO_PROXY_URL + imageId;
   }
 };
 

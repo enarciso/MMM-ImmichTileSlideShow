@@ -1,11 +1,12 @@
 # MMM-ImmichTileSlideShow
 
-A tile-based slideshow for MagicMirror² that displays a configurable grid of images. It is designed to fetch photos from Immich (self-hosted photo app) via the module's `node_helper` and an internal proxy, but it also ships with placeholder tiles so it renders out-of-the-box with zero configuration.
+A tile-based slideshow for MagicMirror² that displays a configurable grid of images. It is designed to fetch photos and (optionally) videos from Immich (self-hosted photo app) via the module's `node_helper` and internal proxies, but it also ships with placeholder tiles so it renders out-of-the-box with zero configuration.
 
 - Grid layout (rows/columns, gap, fit: cover/contain)
 - Rotates a random tile at a fixed interval with configurable transitions (fade/slide)
 - Optional captions
-- Future: Immich integration (memory/album/search/random/anniversary) similar to MMM-ImmichSlideShow
+- Optional video tiles (experimental): muted, autoplay, loop with a concurrency cap
+- Immich integration (memory/album/search/random/anniversary)
 
 <img src="/MMM-ImmichTileSlideShow/screenshot.png" alt="Screenshot" width="640" />
 
@@ -87,6 +88,15 @@ Add this module to your `config/config.js`. No position is required; the module 
         sortImagesDescending: false
       }
     ]
+
+    // Optional: Video support (experimental)
+    // enableVideos: true,            // default: false
+    // imageVideoRatio: "4:1",        // images:videos selection ratio
+    // videoMaxConcurrent: 1,         // play at most N videos at once
+    // videoAutoplay: true,
+    // videoMuted: true,
+    // videoLoop: true,
+    // videoPreload: "metadata",      // none | metadata | auto
   }
 }
 ```
@@ -115,6 +125,14 @@ See `examples/config.example.js` for another snippet.
 | `featuredShuffleMinutes` | number | `10` | Periodically reshuffle which tiles are featured. Set `0` to disable. |
 | `featuredCenterBand` | number | `0.5` | Center band (fraction or percent) where featured tiles are placed. Accepts `0–1` or `0–100`; values closer to 1 widen the center band. |
 | `validImageFileExtensions` | string | `"jpg,jpeg,png,gif,webp,heic"` | Filter by allowed extensions (server-side). |
+| `enableVideos` | boolean | `false` | Allow Immich video assets to appear as tiles. |
+| `imageVideoRatio` | string/number | `"4:1"` | Deterministic cadence of images vs. videos (images:videos). Pattern repeats (e.g., `image,image,image,image,video`). Accepts `"4:1"` or a number `4` (interpreted as `4:1`). |
+| `validVideoFileExtensions` | string | `"mp4,mov,m4v,webm,avi,mkv,3gp"` | Video extensions to include (server-side). |
+| `videoMaxConcurrent` | number | `1` | Maximum number of simultaneously playing videos. |
+| `videoAutoplay` | boolean | `true` | Autoplay videos if allowed by browser policy. |
+| `videoMuted` | boolean | `true` | Mute videos (required for most autoplay policies). |
+| `videoLoop` | boolean | `true` | Loop videos. |
+| `videoPreload` | string | `"metadata"` | HTML5 `preload` behavior for video elements. |
 | `immichConfigs` | array | `[]` | Immich connection settings array. Provide `url`, `apiKey`, and `mode`. |
 | `activeImmichConfigIndex` | number | `0` | Index into `immichConfigs` to use. |
 
@@ -143,11 +161,13 @@ See `examples/config.example.js` for another snippet.
 - Placeholder image: `/MMM-ImmichTileSlideShow/placeholder.svg`
 - Screenshot: `/MMM-ImmichTileSlideShow/screenshot.png`
 
-## Immich Integration (Roadmap)
+## Immich Integration
 
-The module negotiates Immich API version and sets up an internal proxy for thumbnails. Supported modes: memory, album, search, random, anniversary. It filters/sorts images server-side and streams optimized URLs to the client for smooth tile updates.
+The module negotiates Immich API version and sets up internal proxies for thumbnails and (when enabled) basic video playback. Supported modes: memory, album, search, random, anniversary. It filters/sorts assets server-side and streams optimized URLs to the client for smooth tile updates.
 
-Note: If no Immich configuration is provided, the module renders placeholders to verify UI.
+Notes:
+- Video support uses Immich's asset video endpoint via the module's proxy. Depending on your Immich version and codec support on your device, playback may fall back to showing the poster image.
+- If no Immich configuration is provided, the module renders placeholders to verify UI.
 
 ## Troubleshooting
 
