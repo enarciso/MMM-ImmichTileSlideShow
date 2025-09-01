@@ -1,0 +1,16 @@
+{
+  "name": "mmm-immichtileslideshow",
+  "version": "0.1.0",
+  "description": "MagicMirror² module: tile-based slideshow fed by Immich or local placeholders.",
+  "author": "Your Name <you@example.com>",
+  "license": "MIT",
+  "main": "MMM-ImmichTileSlideShow.js",
+  "scripts": {
+    "lint": "eslint . || true",
+    "postinstall": "echo 'MMM-ImmichTileSlideShow ready'"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "http-proxy-middleware": "^3.0.0"
+  }
+}

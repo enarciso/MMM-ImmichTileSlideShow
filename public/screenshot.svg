@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450" role="img" aria-label="Screenshot placeholder">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#0f2027"/>
+      <stop offset="50%" stop-color="#203a43"/>
+      <stop offset="100%" stop-color="#2c5364"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="450" fill="url(#g)"/>
+  <g transform="translate(40,40)">
+    <rect x="0" y="0" width="720" height="370" rx="12" fill="#000" fill-opacity="0.25"/>
+    <g transform="translate(12,12)">
+      <rect x="0" y="0" width="220" height="110" rx="6" fill="#ffffff" fill-opacity="0.15"/>
+      <rect x="236" y="0" width="220" height="110" rx="6" fill="#ffffff" fill-opacity="0.12"/>
+      <rect x="472" y="0" width="220" height="110" rx="6" fill="#ffffff" fill-opacity="0.1"/>
+      <rect x="0" y="122" width="220" height="110" rx="6" fill="#ffffff" fill-opacity="0.12"/>
+      <rect x="236" y="122" width="220" height="110" rx="6" fill="#ffffff" fill-opacity="0.15"/>
+      <rect x="472" y="122" width="220" height="110" rx="6" fill="#ffffff" fill-opacity="0.12"/>
+      <rect x="0" y="244" width="220" height="110" rx="6" fill="#ffffff" fill-opacity="0.1"/>
+      <rect x="236" y="244" width="220" height="110" rx="6" fill="#ffffff" fill-opacity="0.12"/>
+      <rect x="472" y="244" width="220" height="110" rx="6" fill="#ffffff" fill-opacity="0.15"/>
+    </g>
+  </g>
+  <text x="50%" y="86%" dominant-baseline="middle" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#ffffff" fill-opacity="0.95">
+    MMM-ImmichTileSlideShow — Tile grid slideshow
+  </text>
+</svg>
+

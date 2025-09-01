@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" role="img" aria-label="Placeholder">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#4b6cb7"/>
+      <stop offset="100%" stop-color="#182848"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="640" height="360" fill="url(#g)"/>
+  <g fill="#ffffff" fill-opacity="0.75">
+    <circle cx="90" cy="70" r="6"/>
+    <circle cx="120" cy="110" r="4"/>
+    <circle cx="180" cy="50" r="5"/>
+    <circle cx="220" cy="90" r="7"/>
+    <circle cx="260" cy="60" r="3"/>
+    <circle cx="310" cy="100" r="6"/>
+    <circle cx="350" cy="70" r="5"/>
+    <circle cx="400" cy="110" r="4"/>
+    <circle cx="440" cy="60" r="6"/>
+    <circle cx="500" cy="90" r="5"/>
+  </g>
+  <text x="50%" y="52%" dominant-baseline="middle" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" fill="#ffffff" fill-opacity="0.9">
+    MMM-ImmichTileSlideShow
+  </text>
+  <text x="50%" y="60%" dominant-baseline="middle" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" fill="#ffffff" fill-opacity="0.8">
+    Configure Immich to load your photos
+  </text>
+</svg>
+
