@@ -27,6 +27,10 @@ function dlog(ctx, ...args) {
  * @typedef {Object} TileImage
  * @property {string} src
  * @property {string} [title]
+ * @property {"image"|"video"} [kind]
+ * @property {string} [posterSrc]
+ * @property {string} [takenAt]
+ * @property {string} [albumName]
  */
 
 module.exports = NodeHelper.create({
@@ -92,7 +96,7 @@ module.exports = NodeHelper.create({
     const count = Math.max(12, (this.config.tileRows || 2) * (this.config.tileCols || 3) * 3);
     const base = `/${this.name}/placeholder.svg`;
     for (let i = 0; i < count; i++) {
-      images.push({ src: base, title: `Tile ${i + 1}` });
+      images.push({ src: base, title: `Tile ${i + 1}`, kind: 'image' });
     }
 
     this.sendSocketNotification("IMMICH_TILES_DATA", { images });
@@ -138,12 +142,21 @@ function hasValidExt(filename, validSet) {
 /**
  * Convert Immich asset to a tile image record.
  */
-function toTileImage(img, immichApi) {
-  const src = immichApi.getImageLink(img.id);
+function toTileImage(img, immichApi, isVideo) {
   const title = (img.originalFileName || '').replace(/\.[^.]+$/, '');
   const takenAt = (img.exifInfo && img.exifInfo.dateTimeOriginal) || img.fileCreatedAt || img.fileModifiedAt || null;
   const albumName = img.albumName || null;
-  return { src, title, takenAt, albumName };
+  if (isVideo) {
+    return {
+      kind: 'video',
+      src: immichApi.getVideoLink(img.id),
+      posterSrc: immichApi.getImageLink(img.id),
+      title,
+      takenAt,
+      albumName
+    };
+  }
+  return { kind: 'image', src: immichApi.getImageLink(img.id), title, takenAt, albumName };
 }
 
 /**
@@ -181,9 +194,16 @@ async function _loadFromImmichImpl(context) {
     querySize: cfg.querySize
   });
 
-  // Build valid extensions set
-  const validSet = new Set(
+  // Build valid extensions sets
+  const validImageSet = new Set(
     (context.config.validImageFileExtensions || 'jpg,jpeg,png,gif,webp')
+      .toLowerCase()
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
+  const validVideoSet = new Set(
+    (context.config.validVideoFileExtensions || 'mp4,mov,m4v,webm,avi,mkv,3gp')
       .toLowerCase()
       .split(',')
       .map((s) => s.trim())
@@ -245,16 +265,29 @@ async function _loadFromImmichImpl(context) {
     dlog(context, 'memory lane assets count', images && images.length);
   }
 
-  // Filter by extension
+  // Filter by extension and kind
   if (images && images.length) {
     const before = images.length;
-    images = images.filter((img) => hasValidExt(img.originalPath || img.originalFileName || '', validSet));
+    images = images.filter((img) => {
+      const name = img.originalPath || img.originalFileName || '';
+      const type = (img.type || '').toString().toLowerCase();
+      const isVideoByType = type.includes('video');
+      const isImageByType = type.includes('image');
+      const okImage = hasValidExt(name, validImageSet) || isImageByType;
+      const okVideo = (context.config.enableVideos === true) && (hasValidExt(name, validVideoSet) || isVideoByType);
+      return okImage || okVideo;
+    });
     const after = images.length;
     dlog(context, `filter by ext (${before} -> ${after})`);
   }
 
   // Map to tile images
-  let tiles = (images || []).map((img) => toTileImage(img, immichApi));
+  let tiles = (images || []).map((img) => {
+    const name = img.originalPath || img.originalFileName || '';
+    const type = (img.type || '').toString().toLowerCase();
+    const isVideo = type.includes('video') || (!type && hasValidExt(name, validVideoSet));
+    return toTileImage(img, immichApi, isVideo);
+  });
   dlog(context, 'mapped tiles', tiles && tiles.length);
 
   // Sort

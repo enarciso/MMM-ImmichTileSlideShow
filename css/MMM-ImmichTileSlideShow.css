@@ -63,12 +63,22 @@
 @keyframes mmmitss-fade { 0% { opacity: 0.4; } 100% { opacity: 1; } }
 @keyframes mmmitss-slide-up { 0% { transform: translateY(6%); opacity: 0.2; } 100% { transform: translateY(0); opacity: 1; } }
 
-.immich-tile-img {
+.immich-tile-media, .immich-tile-img, .immich-tile-video {
   position: absolute;
   inset: 0;
+}
+
+.immich-tile-img {
   background-size: var(--mmmitss-fit);
   background-position: center;
   background-repeat: no-repeat;
+}
+
+.immich-tile-video {
+  width: 100%;
+  height: 100%;
+  object-fit: var(--mmmitss-fit);
+  display: block;
 }
 
 .immich-tile-caption {
