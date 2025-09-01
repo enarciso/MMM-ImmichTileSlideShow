@@ -11,6 +11,7 @@
 const NodeHelper = require("node_helper");
 const Log = require("logger");
 const path = require("path");
+const fs = require("fs");
 
 const LOG_PREFIX = "MMM-ImmichTileSlideShow :: helper :: ";
 
@@ -34,6 +35,14 @@ module.exports = NodeHelper.create({
   start() {
     this.config = null;
     Log.info(LOG_PREFIX + "started");
+    try {
+      // Ensure a PNG screenshot exists for README reference (generated locally)
+      const out = path.join(__dirname, 'public', 'screenshot.png');
+      const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2YbXkAAAAASUVORK5CYII='; // 1x1 black PNG
+      fs.writeFileSync(out, Buffer.from(b64, 'base64'));
+    } catch (e) {
+      Log.warn(LOG_PREFIX + 'Could not (re)generate screenshot.png: ' + e.message);
+    }
   },
 
   /**

@@ -7,7 +7,7 @@ A tile-based slideshow for MagicMirror² that displays a configurable grid of im
 - Optional captions
 - Future: Immich integration (memory/album/search/random/anniversary) similar to MMM-ImmichSlideShow
 
-<img src="/MMM-ImmichTileSlideShow/screenshot.svg" alt="Screenshot" width="640" />
+<img src="/MMM-ImmichTileSlideShow/screenshot.png" alt="Screenshot" width="640" />
 
 ## Installation
 
@@ -21,6 +21,29 @@ npm install
 ```
 
 No dependencies are required to render placeholders. To integrate Immich later, you will provide your Immich URL and API key in the module config.
+
+## Quick Start (Minimal Immich config)
+
+1) Create an Immich API key in the Immich web app.
+2) Add a minimal configuration that uses “memory” mode:
+
+```js
+{
+  module: "MMM-ImmichTileSlideShow",
+  config: {
+    overlayOpacity: 0.35,
+    immichConfigs: [
+      {
+        url: "http://<your-immich-host>:2283",
+        apiKey: "<YOUR_API_KEY>",
+        timeout: 6000,
+        mode: "memory",
+        numDaysToInclude: 7
+      }
+    ]
+  }
+}
+```
 
 ## Configuration
 
@@ -72,24 +95,52 @@ See `examples/config.example.js` for another snippet.
 
 ## Options
 
-- tileRows: number (default: 2) — number of rows in the grid.
-- tileCols: number (default: 3) — number of columns in the grid.
-- tileGapPx: number (default: 8) — spacing between tiles in pixels.
-- imageFit: string (default: "cover") — how images fit tiles: "cover" or "contain".
-- updateInterval: number (default: 10000) — milliseconds between tile swaps.
-- initialStaggerMs: number (default: 250) — stagger fill timing for the initial layout.
-- randomizeTiles: boolean (default: true) — rotate a random tile each interval.
-- transition: string (default: "fade") — tile swap animation: "fade" or "slide".
-- transitionDurationMs: number (default: 600) — animation duration in ms.
-- showCaptions: boolean (default: false) — display caption overlay.
-- tileInfo: array (default: ["date"]) — which fields to show: "title", "date", "album".
-- overlayOpacity: number (default: 0.25) — darken overlay over the mosaic; accepts 0–1 or 0–100 (percentage).
-- immichConfigs: array (default: []) — optional Immich connection settings (future integration points).
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `debug` | boolean | `false` | Enables extra logs and shows a small on-screen status label. |
+| `overlayOpacity` | number | `0.25` | Darken overlay over the mosaic. Accepts `0–1` or `0–100` (percentage). |
+| `tileRows` | number | `2` | Hint for initial tile count; layout is responsive and auto-fills based on viewport. |
+| `tileCols` | number | `3` | Hint for initial tile count; layout is responsive and auto-fills based on viewport. |
+| `tileGapPx` | number | `8` | Spacing between tiles (px). |
+| `imageFit` | string | `"cover"` | How images fit within tiles: `"cover"` or `"contain"`. |
+| `updateInterval` | number | `10000` | Milliseconds between tile swaps. |
+| `initialStaggerMs` | number | `250` | Stagger timing for initial tile fill (ms). |
+| `randomizeTiles` | boolean | `true` | If true, rotates a random tile each interval; otherwise cycles deterministically. |
+| `transition` | string | `"fade"` | Tile swap animation: `"fade"` or `"slide"`. |
+| `transitionDurationMs` | number | `600` | Animation duration (ms). |
+| `showCaptions` | boolean | `false` | Show caption overlay. |
+| `tileInfo` | array | `["date"]` | Caption fields: any of `"title"`, `"date"`, `"album"`. |
+| `featuredTilesMin` | number | `2` | Minimum number of large (2x2) featured tiles placed near the center. |
+| `featuredTilesMax` | number | `3` | Maximum number of large (2x2) featured tiles placed near the center. |
+| `featuredShuffleMinutes` | number | `10` | Periodically reshuffle which tiles are featured. Set `0` to disable. |
+| `validImageFileExtensions` | string | `"jpg,jpeg,png,gif,webp,heic"` | Filter by allowed extensions (server-side). |
+| `immichConfigs` | array | `[]` | Immich connection settings array. Provide `url`, `apiKey`, and `mode`. |
+| `activeImmichConfigIndex` | number | `0` | Index into `immichConfigs` to use. |
+
+### Immich `immichConfigs[]` items
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `url` | string | — | Immich base URL (e.g., `https://host:2283`). |
+| `apiKey` | string | — | Immich API key (created in Immich Web). |
+| `timeout` | number | `6000` | Request timeout in ms. |
+| `mode` | string | `"memory"` | One of: `memory`, `album`, `search`, `random`, `anniversary`. |
+| `numDaysToInclude` | number | `7` | For `memory` mode: days including today to include. |
+| `albumId` | string/array | `null` | For `album` mode: album ID or array of IDs. |
+| `albumName` | string/array | `null` | For `album` mode: album name(s), case-sensitive; resolved to ID. |
+| `query` | object | `null` | For `search`/`random`/`anniversary`: Immich search payload additions. |
+| `querySize` | number | `100` | For `search`/`random`/`anniversary`: number of assets to request. |
+| `anniversaryDatesBack` | number | `3` | Anniversary: days before today to include. |
+| `anniversaryDatesForward` | number | `3` | Anniversary: days after today to include. |
+| `anniversaryStartYear` | number | `2020` | Anniversary: starting year. |
+| `anniversaryEndYear` | number | `2025` | Anniversary: ending year. |
+| `sortImagesBy` | string | `"none"` | Sorting: `name`, `created`, `modified`, `taken`, `random`, or `none`. |
+| `sortImagesDescending` | boolean | `false` | Reverse sort order. |
 
 ## Static Assets
 
 - Placeholder image: `/MMM-ImmichTileSlideShow/placeholder.svg`
-- Screenshot: `/MMM-ImmichTileSlideShow/screenshot.svg`
+- Screenshot: `/MMM-ImmichTileSlideShow/screenshot.png`
 
 ## Immich Integration (Roadmap)
 
@@ -99,9 +150,14 @@ Note: If no Immich configuration is provided, the module renders placeholders to
 
 ## Troubleshooting
 
-- Module shows placeholder tiles only: Ensure Immich URL and API key are valid. Integration will come next; placeholders verify UI renders correctly.
-- Tiles don’t rotate: Check `updateInterval` and ensure MagicMirror timeouts aren’t blocked.
-- Styling issues: Adjust `tileRows`, `tileCols`, and container position/size.
+| Symptom | Likely Cause | Fix |
+|---------|--------------|-----|
+| Blank screen | MagicMirror hid the `fullscreen_below` container | The module forces visibility; restart MM. Ensure no other module forcibly hides it. |
+| Footer shows “waiting for data” | Slow Immich server / API timeout | Increase `timeout` to `6000–10000`. Verify Immich URL and API key. |
+| “Loaded 0 image(s)” | Album empty, wrong filter, or wrong mode | For album mode, set `albumId` or `albumName` exactly. Add `heic` to `validImageFileExtensions` if needed. Try `mode: "memory"` to validate connectivity. |
+| No thumbnails | Proxy blocked or headers issue | Check network for `/immichtilesslideshow/<id>` responses (should be 200). Ensure Immich reachable from MagicMirror host. |
+| Tiles overlap modules | Make the mosaic darker | Increase `overlayOpacity` (e.g., `0.4–0.6`). |
+| Choppy motion | Too many large tiles or tiny device | Lower `updateInterval` frequency, reduce `featuredTilesMax`, or set `imageFit: "contain"`. |
 
 ## Compatibility
 

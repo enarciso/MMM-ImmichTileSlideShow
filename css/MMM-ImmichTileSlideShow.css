@@ -52,6 +52,11 @@
   grid-row: span 1;
 }
 
+.immich-tile.featured {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
 .transition-fade .immich-tile.swap { animation: mmmitss-fade var(--mmmitss-transition) ease; }
 .transition-slide .immich-tile.swap { animation: mmmitss-slide-up var(--mmmitss-transition) ease; }
 

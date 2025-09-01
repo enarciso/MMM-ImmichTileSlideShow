@@ -57,6 +57,12 @@ Module.register("MMM-ImmichTileSlideShow", {
 
     // Development
     debug: false
+    ,
+    // Featured larger tiles: picks between min..max and places near center
+    featuredTilesMin: 2,
+    featuredTilesMax: 3,
+    // Reshuffle featured tiles every N minutes (0 disables)
+    featuredShuffleMinutes: 10
   },
 
   /**
@@ -84,6 +90,7 @@ Module.register("MMM-ImmichTileSlideShow", {
     this.images = /** @type {TileImage[]} */ ([]);
     this.tileEls = [];
     this._rotationTimer = null;
+    this._featuredTimer = null;
     this._nextImageIndex = 0;
     this._started = false;
 
@@ -249,6 +256,9 @@ Module.register("MMM-ImmichTileSlideShow", {
         this._applyTile(tile, img);
       }, delay);
     }
+    // After initial fill, choose a few featured tiles near center and enlarge them
+    const after = (total - 1) * (this.config.initialStaggerMs || 0) + 150;
+    setTimeout(() => this._applyFeaturedTiles(), after);
   },
 
   /**
@@ -347,6 +357,7 @@ Module.register("MMM-ImmichTileSlideShow", {
    */
   stop() {
     if (this._rotationTimer) clearInterval(this._rotationTimer);
+    if (this._featuredTimer) clearInterval(this._featuredTimer);
     if (this._mmObserver) {
       try { this._mmObserver.disconnect(); } catch (e) {}
       this._mmObserver = null;
@@ -402,6 +413,8 @@ Module.register("MMM-ImmichTileSlideShow", {
    * @param {string} src
    */
   _applyMosaicSpans(tile, src) {
+    // Do not override featured tile sizing
+    if (tile && tile.dataset && tile.dataset.featured === '1') return;
     const img = new Image();
     img.onload = () => {
       const w = img.naturalWidth || img.width;
@@ -426,5 +439,91 @@ Module.register("MMM-ImmichTileSlideShow", {
       tile.dataset.ratio = String(ratio);
     };
     img.src = src;
+  },
+
+  /**
+   * Randomly pick 2..3 tiles and make them 2x2 (4x area), placing them near the center.
+   */
+  _applyFeaturedTiles() {
+    if (!this.tileEls || this.tileEls.length < 6) return;
+    const min = Math.max(0, Number(this.config.featuredTilesMin) || 2);
+    const max = Math.max(min, Number(this.config.featuredTilesMax) || (min + 1));
+    const count = Math.min(max, Math.max(min, Math.floor(Math.random() * (max - min + 1)) + min));
+
+    // Compute central insertion index
+    const total = this.tileEls.length;
+    const centerIndex = Math.max(0, Math.floor(total / 2) - Math.floor(count / 2));
+
+    // Pick unique indices away from edges to bias central placement
+    const pool = [...this.tileEls];
+    // Avoid already featured
+    const candidates = pool.filter((el) => el.dataset.featured !== '1');
+    if (candidates.length === 0) return;
+
+    const chosen = [];
+    for (let i = 0; i < count && candidates.length > 0; i++) {
+      const idx = Math.floor(Math.random() * candidates.length);
+      const el = candidates.splice(idx, 1)[0];
+      chosen.push(el);
+    }
+
+    // Apply featured class and move them near the center of the grid
+    chosen.forEach((tile, i) => {
+      tile.classList.add('featured');
+      tile.dataset.featured = '1';
+      tile.style.gridColumn = 'span 2';
+      tile.style.gridRow = 'span 2';
+      try {
+        const refChild = this._container.children[Math.min(this._container.children.length, centerIndex + i)];
+        if (refChild) this._container.insertBefore(tile, refChild);
+        else this._container.appendChild(tile);
+      } catch (_) {}
+    });
+    this.log('featured tiles applied:', chosen.length);
+
+    // Schedule periodic reshuffle if configured
+    this._scheduleFeaturedShuffle();
+  },
+
+  /**
+   * Remove current featured tiles and restore spans based on stored ratio (if available).
+   */
+  _clearFeaturedTiles() {
+    if (!this._container) return;
+    const featured = this._container.querySelectorAll('.immich-tile.featured');
+    featured.forEach((tile) => {
+      tile.classList.remove('featured');
+      if (tile.dataset) {
+        tile.dataset.featured = '0';
+        const r = parseFloat(tile.dataset.ratio || '1');
+        let col = 1, row = 1;
+        if (!isNaN(r)) {
+          if (r >= 2.0) { col = 3; row = 1; }
+          else if (r >= 1.3) { col = 2; row = 1; }
+          else if (r <= 0.5) { col = 1; row = 3; }
+          else if (r <= 0.8) { col = 1; row = 2; }
+        }
+        tile.style.gridColumn = `span ${col}`;
+        tile.style.gridRow = `span ${row}`;
+      }
+    });
+  },
+
+  /**
+   * Set up (or refresh) periodic featured tiles reshuffle.
+   */
+  _scheduleFeaturedShuffle() {
+    const minutes = Number(this.config.featuredShuffleMinutes || 0);
+    if (!minutes || minutes <= 0) {
+      if (this._featuredTimer) { clearInterval(this._featuredTimer); this._featuredTimer = null; }
+      return;
+    }
+    if (this._featuredTimer) return; // already scheduled
+    const period = Math.max(1, minutes) * 60 * 1000;
+    this._featuredTimer = setInterval(() => {
+      this.log('reshuffle featured tiles');
+      this._clearFeaturedTiles();
+      this._applyFeaturedTiles();
+    }, period);
   }
 });
