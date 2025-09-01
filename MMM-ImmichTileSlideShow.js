@@ -160,6 +160,27 @@ Module.register("MMM-ImmichTileSlideShow", {
       container.classList.remove('hidden');
       container.style.display = '';
     }
+    // Keep the container visible even if MagicMirror toggles it later
+    const keepVisible = () => {
+      if (container && container.classList && container.classList.contains('hidden')) {
+        container.classList.remove('hidden');
+        container.style.display = '';
+        this.log('re-unhid fullscreen_below container');
+      }
+    };
+    try {
+      this._mmObserver = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          if (m.type === 'attributes' && m.attributeName === 'class') {
+            keepVisible();
+          }
+        }
+      });
+      this._mmObserver.observe(container, { attributes: true, attributeFilter: ['class'] });
+      keepVisible();
+    } catch (e) {
+      // ignore observer issues
+    }
     const root = document.createElement('div');
     root.className = 'immich-tiles-root';
     root.style.pointerEvents = 'none';
@@ -310,6 +331,10 @@ Module.register("MMM-ImmichTileSlideShow", {
    */
   stop() {
     if (this._rotationTimer) clearInterval(this._rotationTimer);
+    if (this._mmObserver) {
+      try { this._mmObserver.disconnect(); } catch (e) {}
+      this._mmObserver = null;
+    }
   },
 
   _setDebugText(text) {
