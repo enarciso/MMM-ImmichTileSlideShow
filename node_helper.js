@@ -168,6 +168,19 @@ async function _loadFromImmichImpl(context) {
       images = await immichApi.getAlbumAssetsForAlbumIds(albumIds);
     } else {
       Log.error(LOG_PREFIX + 'Album mode specified but no album found/selected.');
+      // Try to help the user by listing available albums
+      try {
+        const map = await immichApi.getAlbumNameToIdMap();
+        const list = Array.from(map.entries()).map(([name, id]) => `${name} => ${id}`);
+        if (list.length > 0) {
+          Log.info(LOG_PREFIX + `Available albums (${list.length}): ` + list.join('; '));
+          Log.info(LOG_PREFIX + 'Set `albumName: ["<one of the names above>"]` or `albumId: ["<id>"]` in your config.');
+        } else {
+          Log.warn(LOG_PREFIX + 'No albums returned by Immich API.');
+        }
+      } catch (e) {
+        Log.warn(LOG_PREFIX + 'Failed to list albums: ' + e.message);
+      }
     }
   } else if (cfg.mode === 'search') {
     images = await immichApi.searchAssets(cfg.query, cfg.querySize);
@@ -216,6 +229,7 @@ async function _loadFromImmichImpl(context) {
   if (cfg.sortImagesDescending === true) tiles.reverse();
 
   // Send to client
+  Log.info(LOG_PREFIX + `Loaded ${tiles.length} image(s) for mode=${cfg.mode}`);
   context.sendSocketNotification('IMMICH_TILES_DATA', { images: tiles });
 }
 

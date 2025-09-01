@@ -28,6 +28,8 @@ Module.register("MMM-ImmichTileSlideShow", {
     tileCols: 3,
     tileGapPx: 8,
     imageFit: "cover", // cover | contain
+    // Non-fullscreen container height in px (set 0 to let CSS control)
+    containerHeightPx: 360,
 
     // Slideshow behavior
     updateInterval: 10000, // ms - how often to rotate a tile
@@ -45,7 +47,7 @@ Module.register("MMM-ImmichTileSlideShow", {
     // Immich (optional)
     immichConfigs: [], // array of Immich config objects (similar to MMM-ImmichSlideShow)
     activeImmichConfigIndex: 0,
-    validImageFileExtensions: "jpg,jpeg,png,gif,webp",
+    validImageFileExtensions: "jpg,jpeg,png,gif,webp,heic",
 
     // Styling
     backgroundColor: "#000",
@@ -108,6 +110,10 @@ Module.register("MMM-ImmichTileSlideShow", {
     wrapper.style.setProperty("--mmmitss-transition", `${this.config.transitionDurationMs}ms`);
     wrapper.classList.toggle("transition-fade", (this.config.transition || "fade") === "fade");
     wrapper.classList.toggle("transition-slide", (this.config.transition || "fade") === "slide");
+
+    // Provide a sensible default height for non-fullscreen placements
+    const h = Number(this.config.containerHeightPx || 0);
+    if (h > 0) wrapper.style.height = `${h}px`;
 
     // Create tiles (empty until data arrives)
     const total = this.config.tileRows * this.config.tileCols;
