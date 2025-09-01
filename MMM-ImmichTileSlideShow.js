@@ -44,6 +44,9 @@ Module.register("MMM-ImmichTileSlideShow", {
     showCaptions: false,
     tileInfo: ["date"], // which metadata to show in caption: title | date | album
 
+    // Darken overlay over tiles (0–1 or 0–100 for percentage)
+    overlayOpacity: 0.25,
+
     // Immich (optional)
     immichConfigs: [], // array of Immich config objects (similar to MMM-ImmichSlideShow)
     activeImmichConfigIndex: 0,
@@ -206,6 +209,19 @@ Module.register("MMM-ImmichTileSlideShow", {
     }
 
     root.appendChild(wrapper);
+    // Darkening overlay
+    let ov = Number(this.config.overlayOpacity);
+    if (Number.isFinite(ov)) {
+      if (ov > 1) ov = ov / 100; // allow percentage input
+      ov = Math.max(0, Math.min(1, ov));
+    } else {
+      ov = 0.25;
+    }
+    root.style.setProperty('--mmmitss-overlay', String(ov));
+    const overlay = document.createElement('div');
+    overlay.className = 'immich-tiles-overlay';
+    overlay.setAttribute('aria-hidden', 'true');
+    root.appendChild(overlay);
     // Optional debug label
     const dbg = document.createElement('div');
     dbg.className = 'immich-tiles-debug';

@@ -37,6 +37,7 @@ Add this module to your `config/config.js`. No position is required; the module 
     tileCols: 3,           // initial hint for tile count; actual layout is responsive
     tileGapPx: 8,
     imageFit: "cover",     // cover | contain
+    overlayOpacity: 0.35,   // 0–1 or 0–100 (percentage) to darken tiles
 
     // Rotation
     updateInterval: 10000,
@@ -82,6 +83,7 @@ See `examples/config.example.js` for another snippet.
 - transitionDurationMs: number (default: 600) — animation duration in ms.
 - showCaptions: boolean (default: false) — display caption overlay.
 - tileInfo: array (default: ["date"]) — which fields to show: "title", "date", "album".
+- overlayOpacity: number (default: 0.25) — darken overlay over the mosaic; accepts 0–1 or 0–100 (percentage).
 - immichConfigs: array (default: []) — optional Immich connection settings (future integration points).
 
 ## Static Assets
