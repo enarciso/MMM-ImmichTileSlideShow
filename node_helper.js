@@ -38,7 +38,7 @@ module.exports = NodeHelper.create({
       this.config = payload && payload.config ? payload.config : {};
       Log.info(LOG_PREFIX + "register received");
       if (Array.isArray(this.config.immichConfigs) && this.config.immichConfigs.length > 0) {
-        this._loadFromImmich(this).catch((e) => {
+        _loadFromImmichImpl(this).catch((e) => {
           Log.error(LOG_PREFIX + "Immich load failed: " + e.message);
           this._sendInitialImages();
         });
