@@ -113,6 +113,7 @@ See `examples/config.example.js` for another snippet.
 | `featuredTilesMin` | number | `2` | Minimum number of large (2x2) featured tiles placed near the center. |
 | `featuredTilesMax` | number | `3` | Maximum number of large (2x2) featured tiles placed near the center. |
 | `featuredShuffleMinutes` | number | `10` | Periodically reshuffle which tiles are featured. Set `0` to disable. |
+| `featuredCenterBand` | number | `0.5` | Center band (fraction or percent) where featured tiles are placed. Accepts `0–1` or `0–100`; values closer to 1 widen the center band. |
 | `validImageFileExtensions` | string | `"jpg,jpeg,png,gif,webp,heic"` | Filter by allowed extensions (server-side). |
 | `immichConfigs` | array | `[]` | Immich connection settings array. Provide `url`, `apiKey`, and `mode`. |
 | `activeImmichConfigIndex` | number | `0` | Index into `immichConfigs` to use. |

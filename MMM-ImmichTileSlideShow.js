@@ -62,7 +62,9 @@ Module.register("MMM-ImmichTileSlideShow", {
     featuredTilesMin: 2,
     featuredTilesMax: 3,
     // Reshuffle featured tiles every N minutes (0 disables)
-    featuredShuffleMinutes: 10
+    featuredShuffleMinutes: 10,
+    // Center band width (0–1 or 0–100%) where featured tiles are placed
+    featuredCenterBand: 0.5
   },
 
   /**
@@ -450,9 +452,15 @@ Module.register("MMM-ImmichTileSlideShow", {
     const max = Math.max(min, Number(this.config.featuredTilesMax) || (min + 1));
     const count = Math.min(max, Math.max(min, Math.floor(Math.random() * (max - min + 1)) + min));
 
-    // Compute central insertion index
-    const total = this.tileEls.length;
-    const centerIndex = Math.max(0, Math.floor(total / 2) - Math.floor(count / 2));
+    // Compute a central band (portion of the children list) to place featured tiles
+    const total = this._container ? this._container.children.length : this.tileEls.length;
+    let band = Number(this.config.featuredCenterBand);
+    if (!Number.isFinite(band) || band <= 0) band = 0.5;
+    if (band > 1) band = band / 100; // allow percentage
+    band = Math.min(1, Math.max(0.1, band));
+    const bandCount = Math.max(1, Math.floor(total * band));
+    const bandStart = Math.max(0, Math.floor((total - bandCount) / 2));
+    const bandEnd = Math.min(total, bandStart + bandCount);
 
     // Pick unique indices away from edges to bias central placement
     const pool = [...this.tileEls];
@@ -474,7 +482,10 @@ Module.register("MMM-ImmichTileSlideShow", {
       tile.style.gridColumn = 'span 2';
       tile.style.gridRow = 'span 2';
       try {
-        const refChild = this._container.children[Math.min(this._container.children.length, centerIndex + i)];
+        // Distribute evenly across the center band
+        const slot = Math.floor(((i + 1) * (bandEnd - bandStart)) / (chosen.length + 1));
+        const targetIndex = Math.min(this._container.children.length, bandStart + slot);
+        const refChild = this._container.children[targetIndex];
         if (refChild) this._container.insertBefore(tile, refChild);
         else this._container.appendChild(tile);
       } catch (_) {}
