@@ -5,6 +5,26 @@
   "author": "Your Name <you@example.com>",
   "license": "MIT",
   "main": "MMM-ImmichTileSlideShow.js",
+  "keywords": [
+    "magicmirror",
+    "magicmirror-module",
+    "immich",
+    "slideshow",
+    "photos",
+    "gallery",
+    "mosaic",
+    "tiles",
+    "background",
+    "wallpaper"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/enarciso/MMM-ImmichTileSlideShow.git"
+  },
+  "bugs": {
+    "url": "https://github.com/enarciso/MMM-ImmichTileSlideShow/issues"
+  },
+  "homepage": "https://github.com/enarciso/MMM-ImmichTileSlideShow#readme",
   "scripts": {
     "lint": "eslint . || true",
     "postinstall": "echo 'MMM-ImmichTileSlideShow ready'"
