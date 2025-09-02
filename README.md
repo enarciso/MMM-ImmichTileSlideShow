@@ -92,6 +92,9 @@ Add this module to your `config/config.js`. No position is required; the module 
     // Optional: Video support (experimental)
     // enableVideos: true,            // default: false
     // imageVideoRatio: "4:1",        // images:videos selection ratio
+    // videoPlacement: "center",      // center | any | featured
+    // videoPreferFeatured: true,      // if featured tiles exist, prefer them
+    // videoCenterBand: 0.5,           // center band width (0–1 or 0–100)
     // videoMaxConcurrent: 1,         // play at most N videos at once
     // videoAutoplay: true,
     // videoMuted: true,
@@ -127,6 +130,9 @@ See `examples/config.example.js` for another snippet.
 | `validImageFileExtensions` | string | `"jpg,jpeg,png,gif,webp,heic"` | Filter by allowed extensions (server-side). |
 | `enableVideos` | boolean | `false` | Allow Immich video assets to appear as tiles. |
 | `imageVideoRatio` | string/number | `"4:1"` | Deterministic cadence of images vs. videos (images:videos). Pattern repeats (e.g., `image,image,image,image,video`). Accepts `"4:1"` or a number `4` (interpreted as `4:1`). |
+| `videoPlacement` | string | `"center"` | Where to place video tiles: `"center"`, `"featured"`, or `"any"`. |
+| `videoPreferFeatured` | boolean | `true` | Prefer current featured tiles for video playback when available. |
+| `videoCenterBand` | number | `null` | Center band for video placement; defaults to `featuredCenterBand` when `null`. Accepts fraction `0–1` or percent `0–100`. |
 | `validVideoFileExtensions` | string | `"mp4,mov,m4v,webm,avi,mkv,3gp"` | Video extensions to include (server-side). |
 | `videoMaxConcurrent` | number | `1` | Maximum number of simultaneously playing videos. |
 | `videoAutoplay` | boolean | `true` | Autoplay videos if allowed by browser policy. |

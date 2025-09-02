@@ -58,6 +58,10 @@ Module.register("MMM-ImmichTileSlideShow", {
     validVideoFileExtensions: "mp4,mov,m4v,webm,avi,mkv,3gp",
     enableVideos: false,
     imageVideoRatio: "4:1", // images:videos selection ratio
+    // Prefer central area for video playback
+    videoPreferFeatured: true,
+    videoPlacement: "center", // center | any | featured
+    videoCenterBand: null, // null => reuse featuredCenterBand; else 0–1 or 0–100
     videoAutoplay: true,
     videoMuted: true,
     videoLoop: true,
@@ -295,13 +299,18 @@ Module.register("MMM-ImmichTileSlideShow", {
     if (this._rotationTimer) clearInterval(this._rotationTimer);
     this._rotationTimer = setInterval(() => {
       if (!this.tileEls.length) return;
-      const index = this.config.randomizeTiles
-        ? Math.floor(Math.random() * this.tileEls.length)
-        : (Date.now() / this.config.updateInterval) % this.tileEls.length;
-      this.log('rotating tile index', index);
-      const tile = this.tileEls[index];
-      const img = this.images && this.images.length ? this._nextImage() : this._placeholderImage(index);
-      this._applyTile(tile, img, true);
+      const media = this.images && this.images.length ? this._nextImage() : this._placeholderImage(0);
+      let tile = null;
+      if (media && media.kind === 'video' && this.config.enableVideos) {
+        tile = this._pickTileForVideo();
+      }
+      if (!tile) {
+        const index = this.config.randomizeTiles
+          ? Math.floor(Math.random() * this.tileEls.length)
+          : (Date.now() / this.config.updateInterval) % this.tileEls.length;
+        tile = this.tileEls[index];
+      }
+      this._applyTile(tile, media, true);
     }, Math.max(1000, this.config.updateInterval));
   },
 
@@ -512,6 +521,47 @@ Module.register("MMM-ImmichTileSlideShow", {
     }
   }
   ,
+
+  /**
+   * Choose a tile positioned near the center for video playback.
+   * Prefers currently featured tiles if configured and available.
+   * @returns {HTMLDivElement|null}
+   */
+  _pickTileForVideo() {
+    if (!this._container || !this.tileEls || !this.tileEls.length) return null;
+
+    // Prefer featured tiles if available and allowed
+    if (this.config.videoPlacement === 'featured' || this.config.videoPreferFeatured) {
+      const featured = Array.from(this._container.querySelectorAll('.immich-tile.featured'));
+      if (featured.length) {
+        const idx = Math.floor(Math.random() * featured.length);
+        return featured[idx];
+      }
+      if (this.config.videoPlacement === 'featured') return null; // no featured available
+    }
+
+    if (this.config.videoPlacement === 'any') return null;
+
+    // Center band selection
+    const band = this._resolveCenterBand();
+    const total = this._container.children.length;
+    const bandCount = Math.max(1, Math.floor(total * band));
+    const bandStart = Math.max(0, Math.floor((total - bandCount) / 2));
+    const bandEnd = Math.min(total, bandStart + bandCount);
+    if (bandEnd <= bandStart) return null;
+    const pickIndex = Math.floor(Math.random() * (bandEnd - bandStart)) + bandStart;
+    const el = this._container.children[pickIndex];
+    return el && el.classList && el.classList.contains('immich-tile') ? el : null;
+  },
+
+  _resolveCenterBand() {
+    let band = this.config.videoCenterBand;
+    if (band === null || band === undefined || band === '') band = this.config.featuredCenterBand;
+    band = Number(band);
+    if (!Number.isFinite(band) || band <= 0) band = 0.5;
+    if (band > 1) band = band / 100; // allow percent
+    return Math.min(1, Math.max(0.1, band));
+  },
 
   /**
    * Build caption text from config.tileInfo
