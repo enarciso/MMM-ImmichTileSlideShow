@@ -8,7 +8,7 @@ A tile-based slideshow for MagicMirror² that displays a configurable grid of im
 - Optional video tiles (experimental): muted, autoplay, loop with a concurrency cap
 - Immich integration (memory/album/search/random/anniversary)
 
-<img src="/MMM-ImmichTileSlideShow/screenshot.png" alt="Screenshot" width="640" />
+<img src="/MMM-ImmichTileSlideShow/public/screenshot.png" alt="Screenshot" width="640" />
 
 ## Installation
 
