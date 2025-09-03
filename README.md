@@ -1,6 +1,6 @@
 # MMM-ImmichTileSlideShow
 
-A tile-based slideshow for MagicMirror² that displays a configurable grid of images. It is designed to fetch photos and (optionally) videos from Immich (self-hosted photo app) via the module's `node_helper` and internal proxies, but it also ships with placeholder tiles so it renders out-of-the-box with zero configuration.
+A tile-based slideshow for MagicMirror² that displays a configurable grid of images. It is designed to fetch photos and (optionally) videos from [Immich (self-hosted photo app)](http://immch.app/) via the module's `node_helper` and internal proxies, but it also ships with placeholder tiles so it renders out-of-the-box with zero configuration.
 
 - Grid layout (rows/columns, gap, fit: cover/contain)
 - Rotates a random tile at a fixed interval with configurable transitions (fade/slide)
@@ -16,7 +16,7 @@ Clone into your MagicMirror `modules/` directory:
 
 ```
 cd ~/MagicMirror/modules
-git clone <repo-url> MMM-ImmichTileSlideShow
+git clone https://github.com/enarciso/MMM-ImmichTileSlideShow.git MMM-ImmichTileSlideShow
 cd MMM-ImmichTileSlideShow
 npm install
 ```
@@ -164,8 +164,8 @@ See `examples/config.example.js` for another snippet.
 
 ## Static Assets
 
-- Placeholder image: `/MMM-ImmichTileSlideShow/placeholder.svg`
-- Screenshot: `/MMM-ImmichTileSlideShow/screenshot.png`
+- Placeholder image: `/MMM-ImmichTileSlideShow/public/placeholder.svg`
+- Screenshot: `/MMM-ImmichTileSlideShow/public/screenshot.png`
 
 ## Immich Integration
 
