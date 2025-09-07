@@ -119,7 +119,7 @@ See `examples/config.example.js` for another snippet.
 | `autoLayout` | boolean | `true` | Automatically adjusts tile count and gap based on screen/container size. Set to `false` to use advanced manual layout. |
 | `tileRows` | number | `2` | Advanced: legacy hint for initial tile count (ignored when `autoLayout=true`). |
 | `tileCols` | number | `3` | Advanced: legacy hint for initial tile count (ignored when `autoLayout=true`). |
-| `tileGapPx` | number | `8` | Advanced: gap in pixels (when `autoLayout=false` or set explicitly). |
+| `tileGapPx` | number | — | Deprecated. Gap is automatically calculated. |
 | `imageFit` | string | `"cover"` | How images fit within tiles: `"cover"` or `"contain"`. |
 | `useFullscreenBelow` | boolean | `true` | If `true`, renders as a fullscreen background in `fullscreen_below` (no `position` needed; `header` not shown). If `false`, renders inline inside the module region. |
 | `containerHeightPx` | number | `360` | Inline mode only: fixed height for the grid (px). Set to `0` to let CSS/parent control the height. |

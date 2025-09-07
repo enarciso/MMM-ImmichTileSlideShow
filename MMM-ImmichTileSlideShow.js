@@ -28,9 +28,8 @@ Module.register("MMM-ImmichTileSlideShow", {
    */
   defaults: {
     // Grid layout
-    tileRows: 2, // legacy hint; ignored when autoLayout=true
-    tileCols: 3, // legacy hint; ignored when autoLayout=true
-    tileGapPx: 8, // legacy hint; auto if unset when autoLayout=true
+    tileRows: 2, // respected when autoLayout=false
+    tileCols: 3, // respected when autoLayout=false
     imageFit: "cover", // cover | contain
     // Non-fullscreen container height in px (set 0 to let CSS control)
     containerHeightPx: 360,
@@ -289,11 +288,11 @@ Module.register("MMM-ImmichTileSlideShow", {
     // Grid wrapper inside root
     const wrapper = document.createElement('div');
     wrapper.className = 'immich-tiles-wrapper';
-    // Auto gap when autoLayout and no explicit tileGapPx provided
-    if (this.config.autoLayout !== false && (this.config.tileGapPx === undefined || this.config.tileGapPx === null)) {
-      wrapper.style.setProperty("--mmmitss-gap", `clamp(6px, 0.9vw, 14px)`);
+    // Initial gap defaults; will be refined in _updateLayoutVars
+    if (this.config.autoLayout === false) {
+      wrapper.style.setProperty("--mmmitss-gap", `8px`);
     } else {
-      wrapper.style.setProperty("--mmmitss-gap", `${this.config.tileGapPx}px`);
+      wrapper.style.setProperty("--mmmitss-gap", `clamp(8px, 0.9vw, 18px)`);
     }
     wrapper.style.setProperty("--mmmitss-bg", this.config.backgroundColor);
     wrapper.style.setProperty("--mmmitss-fit", this.config.imageFit);
@@ -819,8 +818,26 @@ Module.register("MMM-ImmichTileSlideShow", {
     const w = (root && (root.clientWidth || root.offsetWidth)) || (el.clientWidth || el.offsetWidth) || 0;
     const h = (root && (root.clientHeight || root.offsetHeight)) || (el.clientHeight || el.offsetHeight) || 0;
     if (!w || !h) return;
-    // Heuristic target columns
     const aspect = w / h;
+    // Manual layout: respect tileCols/tileRows and auto-calc gap (min 8)
+    if (this.config.autoLayout === false) {
+      const cols = Math.max(1, Number(this.config.tileCols) || 3);
+      const rows = Math.max(1, Number(this.config.tileRows) || 2);
+      const minGap = 8;
+      // Start with minimum gap to find a feasible tile size, then recompute gap to fully fit width
+      let tileMin = Math.floor((w - (cols - 1) * minGap) / cols);
+      tileMin = Math.max(100, Math.min(640, tileMin));
+      let gapPx = cols > 1 ? Math.floor((w - cols * tileMin) / (cols - 1)) : minGap;
+      gapPx = Math.max(minGap, Math.min(64, gapPx));
+      // Compute row height to fit exactly the requested number of base rows
+      let rowSize = Math.floor((h - (rows - 1) * gapPx) / rows);
+      if (!Number.isFinite(rowSize) || rowSize <= 0) rowSize = Math.round(tileMin * 0.8);
+      el.style.setProperty('--mmmitss-gap', `${gapPx}px`);
+      el.style.setProperty('--tile-min', `${tileMin}px`);
+      el.style.setProperty('--row-size', `${rowSize}px`);
+      return;
+    }
+    // Auto layout heuristics
     let targetCols;
     if (this.config.enableScrolling) {
       // Credits-like: 1–2 columns with bigger gaps

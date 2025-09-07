@@ -9,7 +9,7 @@
     containerHeightPx: 360,
     autoLayout: true,
     // Grid
-    // tileRows/tileCols/tileGapPx not needed when autoLayout=true
+    // tileRows/tileCols only used when autoLayout=false; gap is auto-calculated
 
     // Rotation
     updateInterval: 10000,
