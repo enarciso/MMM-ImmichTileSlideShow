@@ -7,9 +7,9 @@
   config: {
     useFullscreenBelow: false,
     containerHeightPx: 360,
+    autoLayout: true,
     // Grid
-    tileRows: 2,
-    tileCols: 3,
+    // tileRows/tileCols/tileGapPx not needed when autoLayout=true
 
     // Rotation
     updateInterval: 10000,

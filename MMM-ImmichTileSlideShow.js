@@ -28,14 +28,16 @@ Module.register("MMM-ImmichTileSlideShow", {
    */
   defaults: {
     // Grid layout
-    tileRows: 2,
-    tileCols: 3,
-    tileGapPx: 8,
+    tileRows: 2, // legacy hint; ignored when autoLayout=true
+    tileCols: 3, // legacy hint; ignored when autoLayout=true
+    tileGapPx: 8, // legacy hint; auto if unset when autoLayout=true
     imageFit: "cover", // cover | contain
     // Non-fullscreen container height in px (set 0 to let CSS control)
     containerHeightPx: 360,
     // Render mode: use MagicMirror fullscreen_below background or inline module region
     useFullscreenBelow: true,
+    // Auto layout tiles based on viewport/container size
+    autoLayout: true,
 
     // Slideshow behavior
     updateInterval: 10000, // ms - how often to rotate a tile
@@ -58,7 +60,7 @@ Module.register("MMM-ImmichTileSlideShow", {
     activeImmichConfigIndex: 0,
     validImageFileExtensions: "jpg,jpeg,png,gif,webp,heic",
     validVideoFileExtensions: "mp4,mov,m4v,webm,avi,mkv,3gp",
-    enableVideos: false,
+    enableVideos: true,
     imageVideoRatio: "4:1", // images:videos selection ratio
     // Prefer central area for video playback
     videoPreferFeatured: true,
@@ -76,7 +78,8 @@ Module.register("MMM-ImmichTileSlideShow", {
     // Development
     debug: false
     ,
-    // Featured larger tiles: picks between min..max and places near center
+    // Featured larger tiles (automatic by default)
+    featuredAuto: true,
     featuredTilesMin: 2,
     featuredTilesMax: 3,
     // Reshuffle featured tiles every N minutes (0 disables)
@@ -246,6 +249,9 @@ Module.register("MMM-ImmichTileSlideShow", {
     const root = this._buildRootElement();
     container.appendChild(root);
     this._root = root;
+    // After attaching to DOM, recalc tile capacity and bind resize
+    this._recalculateTiles();
+    this._bindResize();
     this.log('created root and tiles:', this.tileEls.length);
   },
 
@@ -263,6 +269,8 @@ Module.register("MMM-ImmichTileSlideShow", {
       this._container.style.height = `${h}px`;
     }
     this._root = root;
+    // Recalculate capacity after insertion (next tick) and bind resize
+    setTimeout(() => { this._recalculateTiles(); this._bindResize(); }, 0);
     return root;
   },
 
@@ -274,7 +282,12 @@ Module.register("MMM-ImmichTileSlideShow", {
     // Grid wrapper inside root
     const wrapper = document.createElement('div');
     wrapper.className = 'immich-tiles-wrapper';
-    wrapper.style.setProperty("--mmmitss-gap", `${this.config.tileGapPx}px`);
+    // Auto gap when autoLayout and no explicit tileGapPx provided
+    if (this.config.autoLayout !== false && (this.config.tileGapPx === undefined || this.config.tileGapPx === null)) {
+      wrapper.style.setProperty("--mmmitss-gap", `clamp(6px, 0.9vw, 14px)`);
+    } else {
+      wrapper.style.setProperty("--mmmitss-gap", `${this.config.tileGapPx}px`);
+    }
     wrapper.style.setProperty("--mmmitss-bg", this.config.backgroundColor);
     wrapper.style.setProperty("--mmmitss-fit", this.config.imageFit);
     wrapper.style.setProperty("--mmmitss-transition", `${this.config.transitionDurationMs}ms`);
@@ -283,9 +296,9 @@ Module.register("MMM-ImmichTileSlideShow", {
     if (this.config.debug) wrapper.classList.add('debug');
 
     this.tileEls = [];
-    // Start with a modest number of tiles; we will keep rotating content
-    const initialTiles = Math.max(12, (this.config.tileRows || 0) * (this.config.tileCols || 0)) || 12;
-    for (let i = 0; i < initialTiles; i++) {
+    // Start with a modest number of tiles; auto capacity adjustments will follow
+    const baseTiles = 20;
+    for (let i = 0; i < baseTiles; i++) {
       const tile = this._createTile();
       wrapper.appendChild(tile);
       this.tileEls.push(tile);
@@ -552,6 +565,7 @@ Module.register("MMM-ImmichTileSlideShow", {
       this._mmObserver = null;
     }
     this._activeVideoCount = 0;
+    this._unbindResize();
     // Remove injected root to avoid leakage on restarts
     try {
       if (this._root && this._root.parentNode) {
@@ -607,10 +621,13 @@ Module.register("MMM-ImmichTileSlideShow", {
   },
 
   _resolveCenterBand() {
+    // Use explicit videoCenterBand if provided; otherwise fall back to automatic band
     let band = this.config.videoCenterBand;
-    if (band === null || band === undefined || band === '') band = this.config.featuredCenterBand;
+    if (band === null || band === undefined || band === '') {
+      band = this._autoCenterBand();
+    }
     band = Number(band);
-    if (!Number.isFinite(band) || band <= 0) band = 0.5;
+    if (!Number.isFinite(band) || band <= 0) band = this._autoCenterBand();
     if (band > 1) band = band / 100; // allow percent
     return Math.min(1, Math.max(0.1, band));
   },
@@ -691,19 +708,115 @@ Module.register("MMM-ImmichTileSlideShow", {
     tile.dataset.ratio = String(ratio);
   },
 
+  // --- Auto layout helpers ---
+  _bindResize() {
+    if (this._resizeBound) return;
+    this._onResize = () => {
+      clearTimeout(this._resizeDebounce);
+      this._resizeDebounce = setTimeout(() => this._recalculateTiles(), 150);
+    };
+    window.addEventListener('resize', this._onResize);
+    this._resizeBound = true;
+  },
+
+  _unbindResize() {
+    if (!this._resizeBound) return;
+    try { window.removeEventListener('resize', this._onResize); } catch (_) {}
+    this._resizeBound = false;
+    this._onResize = null;
+  },
+
+  _recalculateTiles() {
+    if (!this._container || this.config.autoLayout === false) return;
+    const m = this._computeLayoutMetrics();
+    if (!m) return;
+    const buffer = Math.max(2, Math.floor(m.count * 0.15));
+    const needed = Math.min(120, m.count + buffer);
+    const added = this._ensureTileCapacity(needed);
+    if (added > 0 && this.images) {
+      // Fill newly added tiles quickly
+      for (let i = this.tileEls.length - added; i < this.tileEls.length; i++) {
+        const tile = this.tileEls[i];
+        const media = (this.images && this.images.length) ? this._nextImage() : this._placeholderImage(i);
+        this._applyTile(tile, media);
+      }
+      // Re-apply featured tiles on capacity change
+      this._clearFeaturedTiles();
+      this._applyFeaturedTiles();
+    }
+  },
+
+  _ensureTileCapacity(target) {
+    let added = 0;
+    while (this.tileEls.length < target) {
+      const tile = this._createTile();
+      this._container.appendChild(tile);
+      this.tileEls.push(tile);
+      added++;
+    }
+    return added;
+  },
+
+  _computeLayoutMetrics() {
+    try {
+      const el = this._container;
+      const cs = getComputedStyle(el);
+      const gap = parseFloat(cs.gap) || 8;
+      // Probe a tile width from an existing tile; fallback to 180px
+      let tileW = 180;
+      if (this.tileEls && this.tileEls.length) {
+        const r = this.tileEls[0].getBoundingClientRect();
+        if (r && r.width) tileW = r.width;
+      }
+      // Row size is a fixed value in CSS var --row-size; compute from grid-auto-rows
+      let rowH = 140;
+      const gar = cs.gridAutoRows || cs.getPropertyValue('grid-auto-rows');
+      const m = /([0-9.]+)px/.exec(gar);
+      if (m) rowH = parseFloat(m[1]);
+      const w = el.clientWidth || el.offsetWidth || 0;
+      const h = el.clientHeight || el.offsetHeight || 0;
+      if (!w || !h) return null;
+      const cols = Math.max(1, Math.floor((w + gap) / (tileW + gap)));
+      const rows = Math.max(1, Math.floor((h + gap) / (rowH + gap)));
+      const count = Math.max(4, cols * rows);
+      return { gap, tileW, rowH, cols, rows, count };
+    } catch (_) {
+      return null;
+    }
+  },
+
+  _autoCenterBand() {
+    // Compute a reasonable center band width based on container aspect ratio
+    const el = this._container;
+    if (!el) return 0.5;
+    const w = el.clientWidth || 1;
+    const h = el.clientHeight || 1;
+    const aspect = w / h;
+    if (aspect >= 1.8) return 0.4; // very wide
+    if (aspect <= 0.9) return 0.6; // tall
+    return 0.5; // balanced
+  },
+
   /**
    * Randomly pick 2..3 tiles and make them 2x2 (4x area), placing them near the center.
    */
   _applyFeaturedTiles() {
     if (!this.tileEls || this.tileEls.length < 6) return;
-    const min = Math.max(0, Number(this.config.featuredTilesMin) || 2);
-    const max = Math.max(min, Number(this.config.featuredTilesMax) || (min + 1));
-    const count = Math.min(max, Math.max(min, Math.floor(Math.random() * (max - min + 1)) + min));
+    let count;
+    if (this.config.featuredAuto !== false) {
+      // Pick ~12% of tiles as featured (2x2), clamped between 1 and 6
+      const base = Math.round((this._container ? this._container.children.length : this.tileEls.length) * 0.12);
+      count = Math.max(1, Math.min(6, base));
+    } else {
+      const min = Math.max(0, Number(this.config.featuredTilesMin) || 2);
+      const max = Math.max(min, Number(this.config.featuredTilesMax) || (min + 1));
+      count = Math.min(max, Math.max(min, Math.floor(Math.random() * (max - min + 1)) + min));
+    }
 
     // Compute a central band (portion of the children list) to place featured tiles
     const total = this._container ? this._container.children.length : this.tileEls.length;
-    let band = Number(this.config.featuredCenterBand);
-    if (!Number.isFinite(band) || band <= 0) band = 0.5;
+    let band = (this.config.featuredAuto === false) ? Number(this.config.featuredCenterBand) : this._autoCenterBand();
+    if (!Number.isFinite(band) || band <= 0) band = this._autoCenterBand();
     if (band > 1) band = band / 100; // allow percentage
     band = Math.min(1, Math.max(0.1, band));
     const bandCount = Math.max(1, Math.floor(total * band));

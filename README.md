@@ -2,7 +2,7 @@
 
 A tile-based slideshow for MagicMirror² that displays a configurable grid of images. It is designed to fetch photos and (optionally) videos from [Immich (self-hosted photo app)](http://immch.app/) via the module's `node_helper` and internal proxies, but it also ships with placeholder tiles so it renders out-of-the-box with zero configuration.
 
-- Grid layout (rows/columns, gap, fit: cover/contain)
+- Auto grid layout (auto tile count/gap, fit: cover/contain)
 - Rotates a random tile at a fixed interval with configurable transitions (fade/slide)
 - Optional captions
 - Optional video tiles (experimental): muted, autoplay, loop with a concurrency cap
@@ -50,17 +50,15 @@ No dependencies are required to render placeholders. To integrate Immich later, 
 
 Add this module to your `config/config.js`.
 
-By default it renders as a fullscreen background in `fullscreen_below` (no position needed, header is not shown). To render inside a normal region, set `useFullscreenBelow: false` and provide a `position`.
+By default it renders as a fullscreen background in `fullscreen_below` (no position needed, header is not shown) and automatically adjusts the number of tiles and gaps to your screen. To render inside a normal region, set `useFullscreenBelow: false` and provide a `position`.
 
 ```js
 {
   module: "MMM-ImmichTileSlideShow",
   // Fullscreen background mode (default): no position required; header not shown
   config: {
-    // Mosaic grid (auto-scaled by viewport)
-    tileRows: 2,           // initial hint for tile count; actual layout is responsive
-    tileCols: 3,           // initial hint for tile count; actual layout is responsive
-    tileGapPx: 8,
+    // Mosaic grid (auto layout)
+    autoLayout: true,
     imageFit: "cover",     // cover | contain
     overlayOpacity: 0.35,   // 0–1 or 0–100 (percentage) to darken tiles
 
@@ -91,7 +89,7 @@ By default it renders as a fullscreen background in `fullscreen_below` (no posit
     ]
 
     // Optional: Video support (experimental)
-    // enableVideos: true,            // default: false
+    // enableVideos: true,            // default: true
     // imageVideoRatio: "4:1",        // images:videos selection ratio
     // videoPlacement: "center",      // center | any | featured
     // videoPreferFeatured: true,      // if featured tiles exist, prefer them
@@ -113,9 +111,10 @@ See `examples/config.example.js` for another snippet.
 |------|------|---------|-------------|
 | `debug` | boolean | `false` | Enables extra logs and shows a small on-screen status label. |
 | `overlayOpacity` | number | `0.25` | Darken overlay over the mosaic. Accepts `0–1` or `0–100` (percentage). |
-| `tileRows` | number | `2` | Hint for initial tile count; layout is responsive and auto-fills based on viewport. |
-| `tileCols` | number | `3` | Hint for initial tile count; layout is responsive and auto-fills based on viewport. |
-| `tileGapPx` | number | `8` | Spacing between tiles (px). |
+| `autoLayout` | boolean | `true` | Automatically adjusts tile count and gap based on screen/container size. Set to `false` to use advanced manual layout. |
+| `tileRows` | number | `2` | Advanced: legacy hint for initial tile count (ignored when `autoLayout=true`). |
+| `tileCols` | number | `3` | Advanced: legacy hint for initial tile count (ignored when `autoLayout=true`). |
+| `tileGapPx` | number | `8` | Advanced: gap in pixels (when `autoLayout=false` or set explicitly). |
 | `imageFit` | string | `"cover"` | How images fit within tiles: `"cover"` or `"contain"`. |
 | `useFullscreenBelow` | boolean | `true` | If `true`, renders as a fullscreen background in `fullscreen_below` (no `position` needed; `header` not shown). If `false`, renders inline inside the module region. |
 | `containerHeightPx` | number | `360` | Inline mode only: fixed height for the grid (px). Set to `0` to let CSS/parent control the height. |
@@ -198,7 +197,6 @@ Notes:
 
 MIT — see LICENSE
 
-## Changelog
 ### Inline (non-fullscreen) example
 
 ```js
@@ -209,10 +207,12 @@ MIT — see LICENSE
   config: {
     useFullscreenBelow: false,
     containerHeightPx: 360,
-    tileGapPx: 8,
+    autoLayout: true,
     showCaptions: true
   }
 }
 ```
 
+## Changelog
+- v0.6.0 — Auto layout (tiles/gap), videos enabled by default, fullscreen/inline toggle, DOM cleanup, proxy guards
 - v0.1.0 — Initial release with working grid UI and placeholders
