@@ -78,7 +78,6 @@ Module.register("MMM-ImmichTileSlideShow", {
     // Scrolling feature
     enableScrolling: false,
     scrollSpeedPxPerSec: 18,
-    scrollPages: 3,
 
     // Development
     debug: false
@@ -739,9 +738,9 @@ Module.register("MMM-ImmichTileSlideShow", {
     this._updateLayoutVars();
     const m = this._computeLayoutMetrics();
     if (!m) return;
-    const pages = (this.config.enableScrolling ? Math.max(2, Number(this.config.scrollPages) || 3) : 1);
+    const bufferScreens = this.config.enableScrolling ? 2 : 1; // internal buffer (screens worth)
     const buffer = Math.max(2, Math.floor(m.count * (this.config.enableScrolling ? 0.35 : 0.15)));
-    const needed = Math.min(240, (m.count * pages) + buffer);
+    const needed = Math.min(240, (m.count * bufferScreens) + buffer);
     const added = this._ensureTileCapacity(needed);
     if (added > 0 && this.images) {
       // Fill newly added tiles quickly
@@ -754,8 +753,7 @@ Module.register("MMM-ImmichTileSlideShow", {
       this._clearFeaturedTiles();
       this._applyFeaturedTiles();
     }
-    // Update scroll range
-    this._scrollMax = Math.max(0, (this._container.scrollHeight || 0) - (this._container.clientHeight || 0));
+    // nothing else here; infinite scroll recycles tiles on the fly
   },
 
   _ensureTileCapacity(target) {
@@ -953,14 +951,10 @@ Module.register("MMM-ImmichTileSlideShow", {
       const dt = Math.max(0, ts - this._lastScrollTs);
       this._lastScrollTs = ts;
       const speed = Math.max(1, Number(this.config.scrollSpeedPxPerSec) || 18);
-      this._scrollMax = Math.max(0, (this._container.scrollHeight || 0) - (this._container.clientHeight || 0));
-      if (this._scrollMax <= 0) {
-        this._container.style.transform = 'translateY(0)';
-      } else {
-        this._scrollOffset += (speed * dt) / 1000;
-        if (this._scrollOffset > this._scrollMax) this._scrollOffset = 0;
-        this._container.style.transform = `translateY(${-this._scrollOffset}px)`;
-      }
+      this._scrollOffset += (speed * dt) / 1000;
+      // Recycle tiles when we've scrolled past approximately one row
+      this._checkInfiniteScrollRecycle();
+      this._container.style.transform = `translateY(${-this._scrollOffset}px)`;
       this._scrollRaf = window.requestAnimationFrame(step);
     };
     this._scrollRaf = window.requestAnimationFrame(step);
@@ -973,5 +967,24 @@ Module.register("MMM-ImmichTileSlideShow", {
       this._scrollRaf = 0;
     }
     if (this._container) this._container.style.transform = '';
+  },
+
+  _checkInfiniteScrollRecycle() {
+    const m = this._computeLayoutMetrics();
+    if (!m) return;
+    const rowStep = m.rowH + m.gap;
+    // If we've scrolled more than a row, move top N tiles to bottom
+    while (this._scrollOffset > rowStep) {
+      const n = Math.max(1, m.cols);
+      for (let i = 0; i < n && this._container.firstChild; i++) {
+        const tile = this._container.firstChild;
+        // Refill with next media to avoid repeats
+        const media = (this.images && this.images.length) ? this._nextImage() : this._placeholderImage(i);
+        this._applyTile(tile, media);
+        // Move to end
+        this._container.appendChild(tile);
+      }
+      this._scrollOffset -= rowStep;
+    }
   }
 });

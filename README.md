@@ -104,7 +104,6 @@ By default it renders as a fullscreen background in `fullscreen_below` (no posit
     // Optional: Scrolling (experimental)
     // enableScrolling: true,
     // scrollSpeedPxPerSec: 18,
-    // scrollPages: 3,
   }
 }
 ```
@@ -148,9 +147,8 @@ See `examples/config.example.js` for another snippet.
 | `videoMuted` | boolean | `true` | Mute videos (required for most autoplay policies). |
 | `videoLoop` | boolean | `true` | Loop videos. |
 | `videoPreload` | string | `"metadata"` | HTML5 `preload` behavior for video elements. |
-| `enableScrolling` | boolean | `false` | When true, the mosaic scrolls upward automatically to reveal more tiles. |
+| `enableScrolling` | boolean | `false` | When true, the mosaic scrolls upward automatically to reveal more tiles (infinite). |
 | `scrollSpeedPxPerSec` | number | `18` | Vertical scroll speed in pixels per second. |
-| `scrollPages` | number | `3` | How many screens worth of tiles to load to allow smooth scrolling. |
 | `immichConfigs` | array | `[]` | Immich connection settings array. Provide `url`, `apiKey`, and `mode`. |
 | `activeImmichConfigIndex` | number | `0` | Index into `immichConfigs` to use. |
 
