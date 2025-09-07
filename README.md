@@ -5,7 +5,8 @@ A tile-based slideshow for MagicMirror² that displays a configurable grid of im
 - Auto grid layout (auto tile count/gap, fit: cover/contain)
 - Rotates a random tile at a fixed interval with configurable transitions (fade/slide)
 - Optional captions
-- Optional video tiles (experimental): muted, autoplay, loop with a concurrency cap
+- Optional video tiles (experimental): muted, autoplay, loop with a concurrency cap (enabled by default)
+- Optional auto-scrolling to reveal more tiles
 - Immich integration (memory/album/search/random/anniversary)
 
 <img src="public/screenshot.png" alt="Screenshot" width="640" />
@@ -99,6 +100,11 @@ By default it renders as a fullscreen background in `fullscreen_below` (no posit
     // videoMuted: true,
     // videoLoop: true,
     // videoPreload: "metadata",      // none | metadata | auto
+
+    // Optional: Scrolling (experimental)
+    // enableScrolling: true,
+    // scrollSpeedPxPerSec: 18,
+    // scrollPages: 3,
   }
 }
 ```
@@ -125,12 +131,13 @@ See `examples/config.example.js` for another snippet.
 | `transitionDurationMs` | number | `600` | Animation duration (ms). |
 | `showCaptions` | boolean | `false` | Show caption overlay. |
 | `tileInfo` | array | `["date"]` | Caption fields: any of `"title"`, `"date"`, `"album"`. |
-| `featuredTilesMin` | number | `2` | Minimum number of large (2x2) featured tiles placed near the center. |
-| `featuredTilesMax` | number | `3` | Maximum number of large (2x2) featured tiles placed near the center. |
+| `featuredAuto` | boolean | `true` | Automatically picks a few larger (2x2) tiles near the center. |
+| `featuredTilesMin` | number | `2` | Used when `featuredAuto=false`: minimum number of featured tiles. |
+| `featuredTilesMax` | number | `3` | Used when `featuredAuto=false`: maximum number of featured tiles. |
 | `featuredShuffleMinutes` | number | `10` | Periodically reshuffle which tiles are featured. Set `0` to disable. |
-| `featuredCenterBand` | number | `0.5` | Center band (fraction or percent) where featured tiles are placed. Accepts `0–1` or `0–100`; values closer to 1 widen the center band. |
+| `featuredCenterBand` | number | `0.5` | Used when `featuredAuto=false`: center band where featured tiles are placed. Fraction `0–1` or percent `0–100`. |
 | `validImageFileExtensions` | string | `"jpg,jpeg,png,gif,webp,heic"` | Filter by allowed extensions (server-side). |
-| `enableVideos` | boolean | `false` | Allow Immich video assets to appear as tiles. |
+| `enableVideos` | boolean | `true` | Allow Immich video assets to appear as tiles. |
 | `imageVideoRatio` | string/number | `"4:1"` | Deterministic cadence of images vs. videos (images:videos). Pattern repeats (e.g., `image,image,image,image,video`). Accepts `"4:1"` or a number `4` (interpreted as `4:1`). |
 | `videoPlacement` | string | `"center"` | Where to place video tiles: `"center"`, `"featured"`, or `"any"`. |
 | `videoPreferFeatured` | boolean | `true` | Prefer current featured tiles for video playback when available. |
@@ -141,6 +148,9 @@ See `examples/config.example.js` for another snippet.
 | `videoMuted` | boolean | `true` | Mute videos (required for most autoplay policies). |
 | `videoLoop` | boolean | `true` | Loop videos. |
 | `videoPreload` | string | `"metadata"` | HTML5 `preload` behavior for video elements. |
+| `enableScrolling` | boolean | `false` | When true, the mosaic scrolls upward automatically to reveal more tiles. |
+| `scrollSpeedPxPerSec` | number | `18` | Vertical scroll speed in pixels per second. |
+| `scrollPages` | number | `3` | How many screens worth of tiles to load to allow smooth scrolling. |
 | `immichConfigs` | array | `[]` | Immich connection settings array. Provide `url`, `apiKey`, and `mode`. |
 | `activeImmichConfigIndex` | number | `0` | Index into `immichConfigs` to use. |
 
@@ -208,11 +218,14 @@ MIT — see LICENSE
     useFullscreenBelow: false,
     containerHeightPx: 360,
     autoLayout: true,
+    enableScrolling: true,
+    scrollSpeedPxPerSec: 18,
     showCaptions: true
   }
 }
 ```
 
 ## Changelog
-- v0.6.0 — Auto layout (tiles/gap), videos enabled by default, fullscreen/inline toggle, DOM cleanup, proxy guards
+- v0.3.0 — Auto layout tuned (dynamic tile size/rows), added experimental auto-scrolling, videos enabled by default
+- v0.2.0 — Auto layout (tiles/gap), fullscreen/inline toggle, DOM cleanup, proxy guards
 - v0.1.0 — Initial release with working grid UI and placeholders

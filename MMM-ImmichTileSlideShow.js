@@ -75,6 +75,11 @@ Module.register("MMM-ImmichTileSlideShow", {
     // Styling
     backgroundColor: "#000",
 
+    // Scrolling feature
+    enableScrolling: false,
+    scrollSpeedPxPerSec: 18,
+    scrollPages: 3,
+
     // Development
     debug: false
     ,
@@ -188,6 +193,8 @@ Module.register("MMM-ImmichTileSlideShow", {
       this._startRotation();
       this._started = true;
       this._setDebugText(`media: ${this._imagePool.length} img, ${this._videoPool.length} vid`);
+      this._recalculateTiles();
+      this._maybeStartScroll();
     }
   },
 
@@ -270,7 +277,7 @@ Module.register("MMM-ImmichTileSlideShow", {
     }
     this._root = root;
     // Recalculate capacity after insertion (next tick) and bind resize
-    setTimeout(() => { this._recalculateTiles(); this._bindResize(); }, 0);
+    setTimeout(() => { this._recalculateTiles(); this._bindResize(); this._maybeStartScroll(); }, 0);
     return root;
   },
 
@@ -728,10 +735,13 @@ Module.register("MMM-ImmichTileSlideShow", {
 
   _recalculateTiles() {
     if (!this._container || this.config.autoLayout === false) return;
+    // Update CSS variables for layout based on container size
+    this._updateLayoutVars();
     const m = this._computeLayoutMetrics();
     if (!m) return;
-    const buffer = Math.max(2, Math.floor(m.count * 0.15));
-    const needed = Math.min(120, m.count + buffer);
+    const pages = (this.config.enableScrolling ? Math.max(2, Number(this.config.scrollPages) || 3) : 1);
+    const buffer = Math.max(2, Math.floor(m.count * (this.config.enableScrolling ? 0.35 : 0.15)));
+    const needed = Math.min(240, (m.count * pages) + buffer);
     const added = this._ensureTileCapacity(needed);
     if (added > 0 && this.images) {
       // Fill newly added tiles quickly
@@ -744,6 +754,8 @@ Module.register("MMM-ImmichTileSlideShow", {
       this._clearFeaturedTiles();
       this._applyFeaturedTiles();
     }
+    // Update scroll range
+    this._scrollMax = Math.max(0, (this._container.scrollHeight || 0) - (this._container.clientHeight || 0));
   },
 
   _ensureTileCapacity(target) {
@@ -783,6 +795,31 @@ Module.register("MMM-ImmichTileSlideShow", {
     } catch (_) {
       return null;
     }
+  },
+
+  _updateLayoutVars() {
+    const el = this._container;
+    if (!el) return;
+    const root = this._root || el.parentElement;
+    const w = (root && (root.clientWidth || root.offsetWidth)) || (el.clientWidth || el.offsetWidth) || 0;
+    const h = (root && (root.clientHeight || root.offsetHeight)) || (el.clientHeight || el.offsetHeight) || 0;
+    if (!w || !h) return;
+    // Heuristic target columns
+    let targetCols;
+    const aspect = w / h;
+    if (w < 700) targetCols = 3;
+    else if (w < 1100) targetCols = 5;
+    else if (w < 1600) targetCols = 7;
+    else targetCols = 9;
+    if (aspect < 0.9) targetCols = Math.max(3, Math.floor(targetCols * 0.7));
+    const cs = getComputedStyle(el);
+    const gap = parseFloat(cs.gap) || 10;
+    const tileMin = Math.max(140, Math.min(300, Math.floor((w - (targetCols - 1) * gap) / targetCols)));
+    const rowSize = Math.floor(tileMin * (aspect > 1.6 ? 0.72 : aspect < 0.9 ? 0.82 : 0.76));
+    el.style.setProperty('--tile-min', `${tileMin}px`);
+    el.style.setProperty('--row-size', `${rowSize}px`);
+    // Ensure transform optimizations for scrolling
+    el.style.willChange = 'transform';
   },
 
   _autoCenterBand() {
@@ -897,5 +934,44 @@ Module.register("MMM-ImmichTileSlideShow", {
       this._clearFeaturedTiles();
       this._applyFeaturedTiles();
     }, period);
+  },
+
+  // --- Scrolling feature ---
+  _maybeStartScroll() {
+    if (this.config.enableScrolling) this._startScroll();
+    else this._stopScroll();
+  },
+
+  _startScroll() {
+    if (!this._container || this._scrolling) return;
+    this._scrolling = true;
+    this._scrollOffset = 0;
+    this._lastScrollTs = 0;
+    const step = (ts) => {
+      if (!this._scrolling) return;
+      if (!this._lastScrollTs) this._lastScrollTs = ts;
+      const dt = Math.max(0, ts - this._lastScrollTs);
+      this._lastScrollTs = ts;
+      const speed = Math.max(1, Number(this.config.scrollSpeedPxPerSec) || 18);
+      this._scrollMax = Math.max(0, (this._container.scrollHeight || 0) - (this._container.clientHeight || 0));
+      if (this._scrollMax <= 0) {
+        this._container.style.transform = 'translateY(0)';
+      } else {
+        this._scrollOffset += (speed * dt) / 1000;
+        if (this._scrollOffset > this._scrollMax) this._scrollOffset = 0;
+        this._container.style.transform = `translateY(${-this._scrollOffset}px)`;
+      }
+      this._scrollRaf = window.requestAnimationFrame(step);
+    };
+    this._scrollRaf = window.requestAnimationFrame(step);
+  },
+
+  _stopScroll() {
+    this._scrolling = false;
+    if (this._scrollRaf) {
+      try { window.cancelAnimationFrame(this._scrollRaf); } catch (_) {}
+      this._scrollRaf = 0;
+    }
+    if (this._container) this._container.style.transform = '';
   }
 });

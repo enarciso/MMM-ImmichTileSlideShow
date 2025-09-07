@@ -27,8 +27,8 @@
   --mmmitss-bg: #000;
   --mmmitss-fit: cover;
   --mmmitss-transition: 600ms;
-  --tile-min: clamp(120px, 12vw, 260px);
-  --row-size: calc(var(--tile-min) * 0.75);
+  --tile-min: clamp(140px, 12vw, 300px);
+  --row-size: calc(var(--tile-min) * 0.76);
 
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--tile-min), 1fr));
@@ -41,6 +41,7 @@
   overflow: hidden;
   position: relative;
   z-index: 0;
+  will-change: transform;
 }
 
 .immich-tiles-wrapper.debug .immich-tile {
