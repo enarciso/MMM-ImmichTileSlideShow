@@ -34,6 +34,8 @@ Module.register("MMM-ImmichTileSlideShow", {
     imageFit: "cover", // cover | contain
     // Non-fullscreen container height in px (set 0 to let CSS control)
     containerHeightPx: 360,
+    // Render mode: use MagicMirror fullscreen_below background or inline module region
+    useFullscreenBelow: true,
 
     // Slideshow behavior
     updateInterval: 10000, // ms - how often to rotate a tile
@@ -117,6 +119,8 @@ Module.register("MMM-ImmichTileSlideShow", {
     this._videoPool = [];
     this._cadenceIndex = 0;
     this._cadenceSeq = null;
+    this._sizeCache = new Map();
+    this._initialFilled = false;
 
     this.log("started with config", this.config);
 
@@ -126,12 +130,18 @@ Module.register("MMM-ImmichTileSlideShow", {
       config: this.config
     });
 
-    // Mount to fullscreen background region regardless of module position
-    this._ensureRoot();
+    // Create rendering root depending on mode
+    if (this.config.useFullscreenBelow !== false) {
+      this._ensureRootFullscreen();
+    }
 
     // Show placeholders immediately to avoid a blank screen
     if (!this.images || this.images.length === 0) {
-      this._fillTilesInitial();
+      // If fullscreen, tiles are already created; if inline, wait for getDom()
+      if (this._container) {
+        this._fillTilesInitial();
+        this._initialFilled = true;
+      }
       this._startRotation();
       this._setDebugText('waiting for data');
     }
@@ -142,10 +152,21 @@ Module.register("MMM-ImmichTileSlideShow", {
    * @returns {HTMLElement}
    */
   getDom() {
-    // We mount our UI into the fullscreen_below region directly. Return an invisible stub.
-    const stub = document.createElement("div");
-    stub.style.display = "none";
-    return stub;
+    // If using fullscreen background, return an invisible stub
+    if (this.config.useFullscreenBelow !== false) {
+      const stub = document.createElement("div");
+      stub.style.display = "none";
+      return stub;
+    }
+    // Inline mode: build root inside our module wrapper
+    const root = this._ensureRootInline();
+    // If initial placeholders not yet filled, do it now
+    if (!this._initialFilled) {
+      this._fillTilesInitial();
+      this._initialFilled = true;
+      if (!this._rotationTimer) this._startRotation();
+    }
+    return root;
   },
 
   /**
@@ -193,7 +214,7 @@ Module.register("MMM-ImmichTileSlideShow", {
   /**
    * Ensure fullscreen root is created and contains the grid wrapper and tiles.
    */
-  _ensureRoot() {
+  _ensureRootFullscreen() {
     if (this._root) return;
     const container = document.querySelector('.region.fullscreen.below .container') || document.body;
     this.log('mount target found?', !!container);
@@ -222,6 +243,30 @@ Module.register("MMM-ImmichTileSlideShow", {
     } catch (e) {
       // ignore observer issues
     }
+    const root = this._buildRootElement();
+    container.appendChild(root);
+    this._root = root;
+    this.log('created root and tiles:', this.tileEls.length);
+  },
+
+  _ensureRootInline() {
+    // Build the root within module wrapper and return it
+    // If already created, return existing
+    if (this._root) return this._root;
+    const root = this._buildRootElement();
+    root.classList.add('inline');
+    // Inline mode: allow pointer events to interact with module region if needed
+    root.style.pointerEvents = 'auto';
+    // Set container height if provided
+    const h = Number(this.config.containerHeightPx);
+    if (Number.isFinite(h) && h > 0 && this._container) {
+      this._container.style.height = `${h}px`;
+    }
+    this._root = root;
+    return root;
+  },
+
+  _buildRootElement() {
     const root = document.createElement('div');
     root.className = 'immich-tiles-root';
     root.style.pointerEvents = 'none';
@@ -239,7 +284,7 @@ Module.register("MMM-ImmichTileSlideShow", {
 
     this.tileEls = [];
     // Start with a modest number of tiles; we will keep rotating content
-    const initialTiles = Math.max(12, this.config.tileRows * this.config.tileCols) || 12;
+    const initialTiles = Math.max(12, (this.config.tileRows || 0) * (this.config.tileCols || 0)) || 12;
     for (let i = 0; i < initialTiles; i++) {
       const tile = this._createTile();
       wrapper.appendChild(tile);
@@ -265,10 +310,9 @@ Module.register("MMM-ImmichTileSlideShow", {
     dbg.className = 'immich-tiles-debug';
     dbg.style.cssText = 'position:absolute;left:8px;bottom:8px;color:#8bc34a;font:12px/1.2 monospace;background:rgba(0,0,0,.35);padding:4px 6px;border-radius:4px;display:none;';
     root.appendChild(dbg);
-    container.appendChild(root);
-    this._root = root;
+
     this._container = wrapper;
-    this.log('created root and tiles:', this.tileEls.length);
+    return root;
   },
 
   /**
@@ -508,6 +552,14 @@ Module.register("MMM-ImmichTileSlideShow", {
       this._mmObserver = null;
     }
     this._activeVideoCount = 0;
+    // Remove injected root to avoid leakage on restarts
+    try {
+      if (this._root && this._root.parentNode) {
+        this._root.parentNode.removeChild(this._root);
+      }
+    } catch (_) {}
+    this._root = null;
+    this._container = null;
   },
 
   _setDebugText(text) {
@@ -602,30 +654,41 @@ Module.register("MMM-ImmichTileSlideShow", {
   _applyMosaicSpans(tile, src) {
     // Do not override featured tile sizing
     if (tile && tile.dataset && tile.dataset.featured === '1') return;
+    // Use cached ratio when available to avoid image reloading
+    if (this._sizeCache && this._sizeCache.has(src)) {
+      const ratio = this._sizeCache.get(src);
+      this._applySpansForRatio(tile, ratio);
+      return;
+    }
     const img = new Image();
     img.onload = () => {
       const w = img.naturalWidth || img.width;
       const h = img.naturalHeight || img.height;
       if (!w || !h) return;
       const ratio = w / h;
-      let colSpan = 1;
-      let rowSpan = 1;
-      if (ratio >= 2.0) { // panorama
-        colSpan = 3; rowSpan = 1;
-      } else if (ratio >= 1.3) { // landscape
-        colSpan = 2; rowSpan = 1;
-      } else if (ratio <= 0.5) { // very tall
-        colSpan = 1; rowSpan = 3;
-      } else if (ratio <= 0.8) { // portrait
-        colSpan = 1; rowSpan = 2;
-      } else { // near square
-        colSpan = 1; rowSpan = 1;
-      }
-      tile.style.gridColumn = `span ${colSpan}`;
-      tile.style.gridRow = `span ${rowSpan}`;
-      tile.dataset.ratio = String(ratio);
+      if (this._sizeCache) this._sizeCache.set(src, ratio);
+      this._applySpansForRatio(tile, ratio);
     };
     img.src = src;
+  },
+
+  _applySpansForRatio(tile, ratio) {
+    let colSpan = 1;
+    let rowSpan = 1;
+    if (ratio >= 2.0) { // panorama
+      colSpan = 3; rowSpan = 1;
+    } else if (ratio >= 1.3) { // landscape
+      colSpan = 2; rowSpan = 1;
+    } else if (ratio <= 0.5) { // very tall
+      colSpan = 1; rowSpan = 3;
+    } else if (ratio <= 0.8) { // portrait
+      colSpan = 1; rowSpan = 2;
+    } else { // near square
+      colSpan = 1; rowSpan = 1;
+    }
+    tile.style.gridColumn = `span ${colSpan}`;
+    tile.style.gridRow = `span ${rowSpan}`;
+    tile.dataset.ratio = String(ratio);
   },
 
   /**

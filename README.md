@@ -48,13 +48,14 @@ No dependencies are required to render placeholders. To integrate Immich later, 
 
 ## Configuration
 
-Add this module to your `config/config.js`. No position is required; the module mounts to the built-in `fullscreen_below` region automatically and acts as a background behind other modules:
+Add this module to your `config/config.js`.
+
+By default it renders as a fullscreen background in `fullscreen_below` (no position needed, header is not shown). To render inside a normal region, set `useFullscreenBelow: false` and provide a `position`.
 
 ```js
 {
   module: "MMM-ImmichTileSlideShow",
-  // no position needed; module renders fullscreen background
-  header: "Immich Tile Slideshow",
+  // Fullscreen background mode (default): no position required; header not shown
   config: {
     // Mosaic grid (auto-scaled by viewport)
     tileRows: 2,           // initial hint for tile count; actual layout is responsive
@@ -116,6 +117,8 @@ See `examples/config.example.js` for another snippet.
 | `tileCols` | number | `3` | Hint for initial tile count; layout is responsive and auto-fills based on viewport. |
 | `tileGapPx` | number | `8` | Spacing between tiles (px). |
 | `imageFit` | string | `"cover"` | How images fit within tiles: `"cover"` or `"contain"`. |
+| `useFullscreenBelow` | boolean | `true` | If `true`, renders as a fullscreen background in `fullscreen_below` (no `position` needed; `header` not shown). If `false`, renders inline inside the module region. |
+| `containerHeightPx` | number | `360` | Inline mode only: fixed height for the grid (px). Set to `0` to let CSS/parent control the height. |
 | `updateInterval` | number | `10000` | Milliseconds between tile swaps. |
 | `initialStaggerMs` | number | `250` | Stagger timing for initial tile fill (ms). |
 | `randomizeTiles` | boolean | `true` | If true, rotates a random tile each interval; otherwise cycles deterministically. |
@@ -179,7 +182,7 @@ Notes:
 
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
-| Blank screen | MagicMirror hid the `fullscreen_below` container | The module forces visibility; restart MM. Ensure no other module forcibly hides it. |
+| Blank screen | MagicMirror hid the `fullscreen_below` container | In fullscreen mode the module forces visibility; restart MM. Ensure no other module forcibly hides it. For inline mode, set `useFullscreenBelow: false`. |
 | Footer shows “waiting for data” | Slow Immich server / API timeout | Increase `timeout` to `6000–10000`. Verify Immich URL and API key. |
 | “Loaded 0 image(s)” | Album empty, wrong filter, or wrong mode | For album mode, set `albumId` or `albumName` exactly. Add `heic` to `validImageFileExtensions` if needed. Try `mode: "memory"` to validate connectivity. |
 | No thumbnails | Proxy blocked or headers issue | Check network for `/immichtilesslideshow/<id>` responses (should be 200). Ensure Immich reachable from MagicMirror host. |
@@ -196,5 +199,20 @@ Notes:
 MIT — see LICENSE
 
 ## Changelog
+### Inline (non-fullscreen) example
+
+```js
+{
+  module: "MMM-ImmichTileSlideShow",
+  position: "top_left",
+  header: "Immich Tile Slideshow",
+  config: {
+    useFullscreenBelow: false,
+    containerHeightPx: 360,
+    tileGapPx: 8,
+    showCaptions: true
+  }
+}
+```
 
 - v0.1.0 — Initial release with working grid UI and placeholders

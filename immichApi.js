@@ -118,25 +118,28 @@ const immichApi = {
         throw new Error('Failed to get Immich version. Cannot proceed.');
       }
 
-      // Proxy for image thumbnails via MagicMirror
-      if (this.debugOn) Log.info(LOG_PREFIX + '[debug] setting up proxy at ' + IMMICH_PROXY_URL);
-      expressApp.use(
-        IMMICH_PROXY_URL,
-        createProxyMiddleware({
-          target: config.url,
-          changeOrigin: true,
-          proxyTimeout: config.timeout || 6000,
-          headers: {
-            'x-api-key': config.apiKey,
-            accept: 'application/octet-stream'
-          },
-          pathRewrite: (path) => {
-            const parts = path.split('/');
-            const imageId = parts[parts.length - 1];
-            return this.apiBaseUrl + this.apiUrls[this.apiLevel].assetDownload.replace('{id}', imageId);
-          }
-        })
-      );
+      // Proxy for image thumbnails via MagicMirror (guard against duplicates)
+      if (!this._imageProxySetup) {
+        if (this.debugOn) Log.info(LOG_PREFIX + '[debug] setting up proxy at ' + IMMICH_PROXY_URL);
+        expressApp.use(
+          IMMICH_PROXY_URL,
+          createProxyMiddleware({
+            target: config.url,
+            changeOrigin: true,
+            proxyTimeout: config.timeout || 6000,
+            headers: {
+              'x-api-key': config.apiKey,
+              accept: 'application/octet-stream'
+            },
+            pathRewrite: (path) => {
+              const parts = path.split('/');
+              const imageId = parts[parts.length - 1];
+              return this.apiBaseUrl + this.apiUrls[this.apiLevel].assetDownload.replace('{id}', imageId);
+            }
+          })
+        );
+        this._imageProxySetup = true;
+      }
 
       // Proxy for video streaming via MagicMirror
       if (!this._videoProxySetup) {
@@ -147,10 +150,10 @@ const immichApi = {
             target: config.url,
             changeOrigin: true,
             proxyTimeout: config.timeout || 6000,
-          headers: {
-            'x-api-key': config.apiKey,
-            accept: '*/*'
-          },
+            headers: {
+              'x-api-key': config.apiKey,
+              accept: '*/*'
+            },
             pathRewrite: (path) => {
               const parts = path.split('/');
               const assetId = parts[parts.length - 1];
@@ -172,7 +175,8 @@ const immichApi = {
       if (response.status === 200) {
         if (this.debugOn) Log.info(LOG_PREFIX + `[debug] albums received: ${response.data.length}`);
         for (const album of response.data) {
-          map.set(album.albumName, album.id);
+          const name = album.albumName || album.name || album.title || (album['album_name']) || null;
+          if (name) map.set(name, album.id);
         }
       } else {
         Log.error(LOG_PREFIX + 'unexpected response (albums)', response.status, response.statusText);

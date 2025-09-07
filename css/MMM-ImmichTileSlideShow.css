@@ -8,6 +8,12 @@
   z-index: 0; /* inside fullscreen_below region, other modules overlay */
 }
 
+.immich-tiles-root.inline {
+  position: relative; /* allow inline rendering within module area */
+  inset: auto;
+  height: auto;
+}
+
 .immich-tiles-overlay {
   position: absolute;
   inset: 0;

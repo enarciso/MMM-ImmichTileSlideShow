@@ -1,9 +1,12 @@
 // modules/MMM-ImmichTileSlideShow/examples/config.example.js
 {
   module: "MMM-ImmichTileSlideShow",
-  position: "top_left", // Or any region; tiles scale to container
+  // Inline rendering example (set useFullscreenBelow: false)
+  position: "top_left",
   header: "Immich Tile Slideshow",
   config: {
+    useFullscreenBelow: false,
+    containerHeightPx: 360,
     // Grid
     tileRows: 2,
     tileCols: 3,
