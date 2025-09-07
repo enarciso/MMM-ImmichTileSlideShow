@@ -6,7 +6,7 @@ A tile-based slideshow for MagicMirror² that displays a configurable grid of im
 - Rotates a random tile at a fixed interval with configurable transitions (fade/slide)
 - Optional captions
 - Optional video tiles (experimental): muted, autoplay, loop with a concurrency cap (enabled by default)
-- Optional auto-scrolling to reveal more tiles
+- Optional auto-scrolling to reveal more tiles (credits-style spacing with fewer columns)
 - Immich integration (memory/album/search/random/anniversary)
 
 <img src="public/screenshot.png" alt="Screenshot" width="640" />

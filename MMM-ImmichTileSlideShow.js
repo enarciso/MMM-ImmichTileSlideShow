@@ -258,6 +258,7 @@ Module.register("MMM-ImmichTileSlideShow", {
     // After attaching to DOM, recalc tile capacity and bind resize
     this._recalculateTiles();
     this._bindResize();
+    this._maybeStartScroll();
     this.log('created root and tiles:', this.tileEls.length);
   },
 
@@ -738,9 +739,16 @@ Module.register("MMM-ImmichTileSlideShow", {
     this._updateLayoutVars();
     const m = this._computeLayoutMetrics();
     if (!m) return;
-    const bufferScreens = this.config.enableScrolling ? 2 : 1; // internal buffer (screens worth)
-    const buffer = Math.max(2, Math.floor(m.count * (this.config.enableScrolling ? 0.35 : 0.15)));
-    const needed = Math.min(240, (m.count * bufferScreens) + buffer);
+    let needed;
+    if (this.config.enableScrolling) {
+      // Credits-like: keep only visible rows + a few extra rows buffered
+      const extraRows = 4;
+      needed = Math.min(160, (m.cols * (m.rows + extraRows)));
+    } else {
+      const bufferScreens = 1; // minimal buffer
+      const buffer = Math.max(2, Math.floor(m.count * 0.15));
+      needed = Math.min(160, (m.count * bufferScreens) + buffer);
+    }
     const added = this._ensureTileCapacity(needed);
     if (added > 0 && this.images) {
       // Fill newly added tiles quickly
@@ -753,6 +761,8 @@ Module.register("MMM-ImmichTileSlideShow", {
       this._clearFeaturedTiles();
       this._applyFeaturedTiles();
     }
+    // Trim excess tiles to reduce DOM load
+    this._trimTileCapacity(needed);
     // nothing else here; infinite scroll recycles tiles on the fly
   },
 
@@ -765,6 +775,13 @@ Module.register("MMM-ImmichTileSlideShow", {
       added++;
     }
     return added;
+  },
+
+  _trimTileCapacity(target) {
+    while (this.tileEls.length > target) {
+      const tile = this.tileEls.pop();
+      try { tile.remove(); } catch (_) { if (tile && tile.parentNode) tile.parentNode.removeChild(tile); }
+    }
   },
 
   _computeLayoutMetrics() {
@@ -803,19 +820,30 @@ Module.register("MMM-ImmichTileSlideShow", {
     const h = (root && (root.clientHeight || root.offsetHeight)) || (el.clientHeight || el.offsetHeight) || 0;
     if (!w || !h) return;
     // Heuristic target columns
-    let targetCols;
     const aspect = w / h;
-    if (w < 700) targetCols = 3;
-    else if (w < 1100) targetCols = 5;
-    else if (w < 1600) targetCols = 7;
-    else targetCols = 9;
-    if (aspect < 0.9) targetCols = Math.max(3, Math.floor(targetCols * 0.7));
-    const cs = getComputedStyle(el);
-    const gap = parseFloat(cs.gap) || 10;
-    const tileMin = Math.max(140, Math.min(300, Math.floor((w - (targetCols - 1) * gap) / targetCols)));
-    const rowSize = Math.floor(tileMin * (aspect > 1.6 ? 0.72 : aspect < 0.9 ? 0.82 : 0.76));
-    el.style.setProperty('--tile-min', `${tileMin}px`);
-    el.style.setProperty('--row-size', `${rowSize}px`);
+    let targetCols;
+    if (this.config.enableScrolling) {
+      // Credits-like: 1–2 columns with bigger gaps
+      targetCols = (w >= 1200 ? 2 : 1);
+      const gapPx = Math.round(Math.min(40, Math.max(18, w * 0.018)));
+      el.style.setProperty('--mmmitss-gap', `${gapPx}px`);
+      const tileMin = Math.round(Math.max(220, Math.min(420, (w - (targetCols - 1) * gapPx) / targetCols)));
+      const rowSize = Math.round(tileMin * 0.85);
+      el.style.setProperty('--tile-min', `${tileMin}px`);
+      el.style.setProperty('--row-size', `${rowSize}px`);
+    } else {
+      if (w < 700) targetCols = 3;
+      else if (w < 1100) targetCols = 5;
+      else if (w < 1600) targetCols = 7;
+      else targetCols = 9;
+      if (aspect < 0.9) targetCols = Math.max(3, Math.floor(targetCols * 0.7));
+      const cs = getComputedStyle(el);
+      const gap = parseFloat(cs.gap) || 10;
+      const tileMin = Math.max(140, Math.min(300, Math.floor((w - (targetCols - 1) * gap) / targetCols)));
+      const rowSize = Math.floor(tileMin * (aspect > 1.6 ? 0.72 : aspect < 0.9 ? 0.82 : 0.76));
+      el.style.setProperty('--tile-min', `${tileMin}px`);
+      el.style.setProperty('--row-size', `${rowSize}px`);
+    }
     // Ensure transform optimizations for scrolling
     el.style.willChange = 'transform';
   },
@@ -836,6 +864,8 @@ Module.register("MMM-ImmichTileSlideShow", {
    * Randomly pick 2..3 tiles and make them 2x2 (4x area), placing them near the center.
    */
   _applyFeaturedTiles() {
+    // In credits-like scrolling mode, skip featured tiles for cleaner layout
+    if (this.config.enableScrolling) return;
     if (!this.tileEls || this.tileEls.length < 6) return;
     let count;
     if (this.config.featuredAuto !== false) {
