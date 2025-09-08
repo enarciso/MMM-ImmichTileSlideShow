@@ -44,6 +44,10 @@
   will-change: transform;
 }
 
+.immich-tiles-wrapper.credits-mode {
+  grid-auto-flow: row; /* avoid dense packing holes during credits-style scroll */
+}
+
 .immich-tiles-wrapper.debug .immich-tile {
   outline: 1px dashed rgba(255,255,255,0.2);
 }
