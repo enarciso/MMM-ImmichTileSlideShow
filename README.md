@@ -224,6 +224,6 @@ MIT — see LICENSE
 ```
 
 ## Changelog
-- v0.3.0 — Auto layout tuned (dynamic tile size/rows), added experimental auto-scrolling, videos enabled by default
-- v0.2.0 — Auto layout (tiles/gap), fullscreen/inline toggle, DOM cleanup, proxy guards
+- v0.7.0 — Auto layout tuned (dynamic tile size/rows), added experimental auto-scrolling, videos enabled by default
+- v0.6.0 — Auto layout (tiles/gap), fullscreen/inline toggle, DOM cleanup, proxy guards
 - v0.1.0 — Initial release with working grid UI and placeholders
