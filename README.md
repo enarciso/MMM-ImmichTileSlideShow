@@ -24,6 +24,24 @@ npm install
 
 No dependencies are required to render placeholders. To integrate Immich later, you will provide your Immich URL and API key in the module config.
 
+### Works With MMM-SetupWizard + MMM-MultiConfig
+- SetupWizard can create a per-user Immich album and auto-generate `config/multi/<username>.config.js` plus a token link served by MultiConfig.
+- The generated profile config includes your albumId and Immich base URL. For the slideshow to fetch assets (instead of placeholders), add an Immich API key to that profile config or to your main/JSON modules config.
+
+Example (profile file `config/multi/<username>.config.js`):
+```js
+{
+  module: "MMM-ImmichTileSlideShow",
+  position: "fullscreen_below",
+  config: {
+    useFullscreenBelow: true,
+    immichConfigs: [
+      { url: "http://immich.local:2283", apiKey: "<API_KEY>", mode: "album", albumId: "<ALBUM_ID>", querySize: 500 }
+    ]
+  }
+}
+```
+
 ## Quick Start (Minimal Immich config)
 
 1) Create an Immich API key in the Immich web app.
@@ -184,6 +202,7 @@ The module negotiates Immich API version and sets up internal proxies for thumbn
 Notes:
 - Video support uses Immich's asset video endpoint via the module's proxy. Depending on your Immich version and codec support on your device, playback may fall back to showing the poster image.
 - If no Immich configuration is provided, the module renders placeholders to verify UI.
+- When used with SetupWizard, an album is created for the user and their profile config is generated with `albumId`. To receive actual photos, ensure you provide a valid Immich API key (admin- or user- scoped) in the slideshow's `immichConfigs`.
 
 ## Troubleshooting
 
@@ -204,6 +223,13 @@ Notes:
 ## License
 
 MIT — see LICENSE
+
+## End-to-End (with SetupWizard + MultiConfig)
+1) Enable MMM-SetupWizard and MMM-MultiConfig in your server config (see their READMEs). Open the wizard at `http://<host>:8080/MMM-SetupWizard/`.
+2) In Basics, set username/password; the wizard creates your profile config and token link.
+3) In Photos, create your Immich album (requires `config/system.secrets.json` on the server).
+4) Edit your profile config at `config/multi/<username>.config.js` and add an Immich API key to `immichConfigs[0]`.
+5) Visit your personal display at `http://<host>:8080/multi/t/<token>`.
 
 ### Inline (non-fullscreen) example
 
