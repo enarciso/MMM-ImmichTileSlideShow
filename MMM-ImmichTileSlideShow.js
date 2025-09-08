@@ -819,6 +819,25 @@ Module.register("MMM-ImmichTileSlideShow", {
     const h = (root && (root.clientHeight || root.offsetHeight)) || (el.clientHeight || el.offsetHeight) || 0;
     if (!w || !h) return;
     const aspect = w / h;
+    // Hard override: when autoLayout=true AND enableScrolling=true, allow tileCols/tileRows to force layout
+    if (this.config.autoLayout !== false && this.config.enableScrolling && (Number(this.config.tileCols) || Number(this.config.tileRows))) {
+      const cols = Math.max(1, Number(this.config.tileCols) || 1);
+      const minGap = 8;
+      let tileMin = Math.floor((w - (cols - 1) * minGap) / cols);
+      tileMin = Math.max(140, Math.min(640, tileMin));
+      let gapPx = cols > 1 ? Math.floor((w - cols * tileMin) / (cols - 1)) : minGap;
+      gapPx = Math.max(minGap, Math.min(64, gapPx));
+      // rows handling: honor tileRows if provided, otherwise choose a pleasing row size based on tileMin
+      const rowsCfg = Number(this.config.tileRows);
+      let rowSize = rowsCfg && rowsCfg > 0 ? Math.floor((h - (rowsCfg - 1) * gapPx) / rowsCfg) : Math.round(tileMin * 0.85);
+      if (!Number.isFinite(rowSize) || rowSize <= 0) rowSize = Math.round(tileMin * 0.85);
+      el.style.setProperty('--mmmitss-gap', `${gapPx}px`);
+      el.style.setProperty('--tile-min', `${tileMin}px`);
+      el.style.setProperty('--row-size', `${rowSize}px`);
+      // Ensure transform optimizations for scrolling
+      el.style.willChange = 'transform';
+      return;
+    }
     // Manual layout: respect tileCols/tileRows and auto-calc gap (min 8)
     if (this.config.autoLayout === false) {
       const cols = Math.max(1, Number(this.config.tileCols) || 3);

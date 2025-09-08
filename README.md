@@ -6,7 +6,7 @@ A tile-based slideshow for MagicMirror² that displays a configurable grid of im
 - Rotates a random tile at a fixed interval with configurable transitions (fade/slide)
 - Optional captions
 - Optional video tiles (experimental): muted, autoplay, loop with a concurrency cap (enabled by default)
-- Optional auto-scrolling to reveal more tiles (credits-style spacing with fewer columns)
+- Optional auto-scrolling to reveal more tiles (credits-style spacing with fewer columns). When autoLayout is true and scrolling is enabled, setting tileCols/tileRows acts as a hard override for columns/rows with automatic gap.
 - Immich integration (memory/album/search/random/anniversary)
 
 <img src="public/screenshot.png" alt="Screenshot" width="640" />
@@ -117,8 +117,8 @@ See `examples/config.example.js` for another snippet.
 | `debug` | boolean | `false` | Enables extra logs and shows a small on-screen status label. |
 | `overlayOpacity` | number | `0.25` | Darken overlay over the mosaic. Accepts `0–1` or `0–100` (percentage). |
 | `autoLayout` | boolean | `true` | Automatically adjusts tile count and gap based on screen/container size. Set to `false` to use advanced manual layout. |
-| `tileRows` | number | `2` | Advanced: legacy hint for initial tile count (ignored when `autoLayout=true`). |
-| `tileCols` | number | `3` | Advanced: legacy hint for initial tile count (ignored when `autoLayout=true`). |
+| `tileRows` | number | `2` | Manual layout rows when `autoLayout=false`. Also acts as a hard override when `autoLayout=true` and `enableScrolling=true`. |
+| `tileCols` | number | `3` | Manual layout cols when `autoLayout=false`. Also acts as a hard override when `autoLayout=true` and `enableScrolling=true`. |
 | `tileGapPx` | number | — | Deprecated. Gap is automatically calculated. |
 | `imageFit` | string | `"cover"` | How images fit within tiles: `"cover"` or `"contain"`. |
 | `useFullscreenBelow` | boolean | `true` | If `true`, renders as a fullscreen background in `fullscreen_below` (no `position` needed; `header` not shown). If `false`, renders inline inside the module region. |
