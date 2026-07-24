@@ -91,7 +91,27 @@ config: {
 }
 ```
 
-> Mosaic is the densest, most visually varied layout. If you want big, predictable tiles, use `grid`.
+**Mosaic ignores `cols`/`rows` by design.** A fixed cell budget plus multi-cell spans is what produces blank cells, so mosaic derives its column count from the viewport instead. To make mosaic tiles bigger, set a minimum tile width with `tileSize` — CSS fills as many columns as fit, and rows stay unbounded, so spans still pack cleanly:
+
+```js
+config: {
+  mode: "mosaic",
+  tileSize: "large",   // "small" | "medium" | "large", or a number of px
+  immich: { … }
+}
+```
+
+Roughly how many columns you get on a 1920px-wide display:
+
+| `tileSize` | Min width | Columns |
+|---|---|---|
+| *(unset)* | adaptive | 9 |
+| `"small"` | 240px | 7 |
+| `"medium"` | 340px | 5 |
+| `"large"` | 480px | 3 |
+| `600` | 600px | 3 |
+
+> Mosaic is the densest, most visually varied layout. If you want exact tile counts rather than a minimum size, use `grid`.
 
 ## Options
 
@@ -104,6 +124,7 @@ Grouped options accept `true`, `false`, **or** an object of settings — so `vid
 | `mode` | string | `"mosaic"` | `"frame"`, `"grid"`, or `"mosaic"`. Determines tile count, sizing, and whether aspect-based spans apply. |
 | `cols` | number | `3` | Columns — `grid` mode only. |
 | `rows` | number | `2` | Rows — `grid` mode only. |
+| `tileSize` | number \| string | `null` | Minimum tile width — **`mosaic` mode only**. `"small"` (240px), `"medium"` (340px), `"large"` (480px), or a number of pixels. `null` uses the adaptive width heuristic. Ignored in `grid`/`frame`, where `cols`/`rows` govern. |
 | `fit` | string | `"cover"` | How media fills a tile: `"cover"` (crop) or `"contain"` (letterbox). |
 | `dim` | number | `0.25` | Darkening overlay so other modules stay readable. `0`–`1` or `0`–`100`. |
 | `fullscreen` | boolean | `true` | Render as a fullscreen background (no `position` needed). Set `false` to render inside a region. |

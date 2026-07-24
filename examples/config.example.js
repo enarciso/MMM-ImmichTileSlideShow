@@ -68,6 +68,7 @@
   module: "MMM-ImmichTileSlideShow",
   config: {
     mode: "mosaic",
+    tileSize: "medium",   // "small" | "medium" | "large", or px — mosaic only
     interval: 8000,
     dim: 0.35,
     featured: { min: 2, max: 4, shuffleMinutes: 10 },

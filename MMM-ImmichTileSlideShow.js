@@ -35,6 +35,7 @@ Module.register("MMM-ImmichTileSlideShow", {
     mode: "mosaic",
     cols: 3, // grid mode only
     rows: 2, // grid mode only
+    tileSize: null, // mosaic only: px, or "small" | "medium" | "large"
 
     // Slideshow
     interval: 10000,
@@ -924,26 +925,37 @@ Module.register("MMM-ImmichTileSlideShow", {
     // Clear any inline manual-layout overrides when returning to auto layout
     if (el.style.gridTemplateColumns) el.style.gridTemplateColumns = '';
     if (el.style.gridAutoRows) el.style.gridAutoRows = '';
-    // Auto layout heuristics
+    // Auto layout (mosaic). An explicit tileSize overrides the width heuristic:
+    // CSS auto-fill derives the column count from --tile-min, and rows stay
+    // unbounded, so aspect spans still pack without leaving holes.
+    const forcedTile = this.cfg.layout.tileSize;
     let targetCols;
     if (this.cfg.scroll.enabled) {
       // Credits-like: 1–2 columns with bigger gaps
       targetCols = (w >= 1200 ? 2 : 1);
       const gapPx = Math.round(Math.min(40, Math.max(18, w * 0.018)));
       el.style.setProperty('--mmmitss-gap', `${gapPx}px`);
-      const tileMin = Math.round(Math.max(220, Math.min(420, (w - (targetCols - 1) * gapPx) / targetCols)));
+      const tileMin = forcedTile
+        ? Math.min(forcedTile, w)
+        : Math.round(Math.max(220, Math.min(420, (w - (targetCols - 1) * gapPx) / targetCols)));
       const rowSize = Math.round(tileMin * 0.85);
       el.style.setProperty('--tile-min', `${tileMin}px`);
       el.style.setProperty('--row-size', `${rowSize}px`);
     } else {
-      if (w < 700) targetCols = 3;
-      else if (w < 1100) targetCols = 5;
-      else if (w < 1600) targetCols = 7;
-      else targetCols = 9;
-      if (aspect < 0.9) targetCols = Math.max(3, Math.floor(targetCols * 0.7));
       const cs = getComputedStyle(el);
       const gap = parseFloat(cs.gap) || 10;
-      const tileMin = Math.max(140, Math.min(300, Math.floor((w - (targetCols - 1) * gap) / targetCols)));
+      let tileMin;
+      if (forcedTile) {
+        // Never exceed the viewport, or auto-fill collapses to a single column
+        tileMin = Math.min(forcedTile, w);
+      } else {
+        if (w < 700) targetCols = 3;
+        else if (w < 1100) targetCols = 5;
+        else if (w < 1600) targetCols = 7;
+        else targetCols = 9;
+        if (aspect < 0.9) targetCols = Math.max(3, Math.floor(targetCols * 0.7));
+        tileMin = Math.max(140, Math.min(300, Math.floor((w - (targetCols - 1) * gap) / targetCols)));
+      }
       const rowSize = Math.floor(tileMin * (aspect > 1.6 ? 0.72 : aspect < 0.9 ? 0.82 : 0.76));
       el.style.setProperty('--tile-min', `${tileMin}px`);
       el.style.setProperty('--row-size', `${rowSize}px`);

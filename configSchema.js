@@ -86,6 +86,33 @@
   const VALID_SOURCES = ['memory', 'album', 'search', 'random', 'anniversary'];
 
   /**
+   * Named tile sizes for `mode: "mosaic"`, in px of minimum tile width.
+   * Chosen so a 1920px-wide display yields roughly 7 / 5 / 3 columns,
+   * against the adaptive heuristic's 9.
+   */
+  const TILE_SIZES = { small: 240, medium: 340, large: 480 };
+
+  /**
+   * Resolve `tileSize` into a px floor, or null to use the adaptive heuristic.
+   * Accepts a number, a numeric string ("400" / "400px"), or a TILE_SIZES key.
+   * @param {*} value
+   * @returns {number|null}
+   */
+  function toTileSize(value) {
+    if (value == null || value === false) return null;
+    if (typeof value === 'string') {
+      const key = value.trim().toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(TILE_SIZES, key)) return TILE_SIZES[key];
+      // Fall through so "400" and "400px" behave like the number 400 rather
+      // than silently reverting to the heuristic.
+      value = key.replace(/px$/, '');
+    }
+    const n = Number(value);
+    // Below ~80px tiles stop being legible; above 2000px there is nothing to gain.
+    return Number.isFinite(n) && n > 0 ? Math.max(80, Math.min(2000, Math.round(n))) : null;
+  }
+
+  /**
    * Detect v1 config keys. Returns [] when the config is clean.
    * @param {object} config raw module config
    * @returns {{key:string, hint:string}[]}
@@ -216,18 +243,22 @@
     const mode = VALID_MODES.includes(raw.mode) ? raw.mode : 'mosaic';
 
     // Layout is fully derived from `mode` — this is the core v2 simplification.
+    // `tileSize` applies to mosaic only: cols/rows would cap the cell budget and
+    // reintroduce blank cells, whereas a minimum tile width lets CSS auto-fill
+    // pick the count against unbounded rows, so aspect spans stay safe.
     let layout;
     if (mode === 'frame') {
-      layout = { auto: false, cols: 1, rows: 1, spans: false };
+      layout = { auto: false, cols: 1, rows: 1, spans: false, tileSize: null };
     } else if (mode === 'grid') {
       layout = {
         auto: false,
         cols: Math.max(1, Number(raw.cols) || 3),
         rows: Math.max(1, Number(raw.rows) || 2),
-        spans: false
+        spans: false,
+        tileSize: null
       };
     } else {
-      layout = { auto: true, cols: null, rows: null, spans: true };
+      layout = { auto: true, cols: null, rows: null, spans: true, tileSize: toTileSize(raw.tileSize) };
     }
 
     // Featured tiles only make sense in mosaic; force off elsewhere.
@@ -304,6 +335,7 @@
     LEGACY_KEYS,
     LEGACY_IMMICH_KEYS,
     VALID_MODES,
-    VALID_SOURCES
+    VALID_SOURCES,
+    TILE_SIZES
   };
 });

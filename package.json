@@ -1,6 +1,6 @@
 {
   "name": "mmm-immichtileslideshow",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "MagicMirror² module: tile-based slideshow fed by Immich or local placeholders.",
   "author": "Your Name <you@example.com>",
   "license": "MIT",
