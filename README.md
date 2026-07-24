@@ -1,8 +1,10 @@
 # MMM-ImmichTileSlideShow
 
-A tile-based slideshow for MagicMirror² that displays a configurable grid of images. It is designed to fetch photos and (optionally) videos from [Immich (self-hosted photo app)](http://immch.app/) via the module's `node_helper` and internal proxies, but it also ships with placeholder tiles so it renders out-of-the-box with zero configuration.
+A tile-based slideshow for MagicMirror² that displays a configurable grid of images. It is designed to fetch photos and (optionally) videos from [Immich (self-hosted photo app)](https://immich.app/) via the module's `node_helper` and internal proxies, but it also ships with placeholder tiles so it renders out-of-the-box with zero configuration.
 
-Performance note (Raspberry Pi / Chromium): this module now requests Immich thumbnails for images and the encoded video stream instead of full originals. For images, it tries `preview` first, then `thumbnail`, and finally falls back to the original if needed. For videos, it tries the encoded `/assets/{id}/video` first, then falls back to the original. This significantly reduces bandwidth and CPU usage on low-power devices while remaining robust.
+Performance note (Raspberry Pi / Chromium): this module requests Immich thumbnails for images and the encoded video stream instead of full originals. For images, it tries `preview` first, then `thumbnail`, and finally falls back to the original if needed. For videos, it uses the encoded video endpoint (v1.x: `/assets/{id}/video`, v3+: `/assets/{id}/video/playback`) with the original as fallback. This significantly reduces bandwidth and CPU usage on low-power devices while remaining robust.
+
+Supports Immich **v1.94+ through v3.x**. The module auto-detects the server version and picks the right endpoints; on v3+, album listings are fetched via `/search/metadata` and pages stream to the frontend so large albums start rendering immediately.
 
 - Auto grid layout (auto tile count/gap, fit: cover/contain)
 - Rotates a random tile at a fixed interval with configurable transitions (fade/slide)
@@ -112,6 +114,25 @@ By default it renders as a fullscreen background in `fullscreen_below` (no posit
 
 See `examples/config.example.js` for another snippet.
 
+### Layout modes
+
+Two ways to lay out tiles — pick one:
+
+**Auto layout (`autoLayout: true`, the default)** — chooses column count and tile size from viewport width. Portraits become row-span 2, landscapes col-span 2, and panoramas col-span 3 for a bento-box mosaic. Best when you want a dense, visually varied grid across many screen sizes.
+
+**Manual layout (`autoLayout: false`)** — you specify exactly `tileCols` × `tileRows` and the grid fills the viewport with that many uniform tiles. In this mode `tileSpans` defaults to `false`, so every tile is 1×1 and `imageFit` crops portraits/landscapes to fill (no blank cells). Best when you want big, predictable tiles or few-tile "digital picture frame" layouts.
+
+Recipes for a 16:9 monitor:
+
+| Look | Config |
+|---|---|
+| One full-screen photo | `autoLayout: false, tileCols: 1, tileRows: 1` |
+| Two big side-by-side | `autoLayout: false, tileCols: 2, tileRows: 1` |
+| Six large tiles | `autoLayout: false, tileCols: 3, tileRows: 2` |
+| Twelve medium tiles | `autoLayout: false, tileCols: 4, tileRows: 3` |
+| Auto mosaic (default) | `autoLayout: true` |
+| Manual grid with aspect spans | `autoLayout: false, tileSpans: true` (may leave blank cells if spans exceed grid area) |
+
 ## Options
 
 | Name | Type | Default | Description |
@@ -168,8 +189,8 @@ See `examples/config.example.js` for another snippet.
 | `timeout` | number | `6000` | Request timeout in ms. |
 | `mode` | string | `"memory"` | One of: `memory`, `album`, `search`, `random`, `anniversary`. |
 | `numDaysToInclude` | number | `7` | For `memory` mode: days including today to include. |
-| `albumId` | string/array | `null` | For `album` mode: album ID or array of IDs. |
-| `albumName` | string/array | `null` | For `album` mode: album name(s), case-sensitive; resolved to ID. |
+| `albumId` | string/array | `null` | For `album` mode: album ID or array of IDs. Take these from the Immich album URL (`/albums/<id>`). When both `albumId` and `albumName` are set, `albumId` wins. |
+| `albumName` | string/array | `null` | For `album` mode: album name(s), case-sensitive; resolved to ID via `/albums`. Ignored when `albumId` is also set. |
 | `query` | object | `null` | For `search`/`random`/`anniversary`: Immich search payload additions. |
 | `querySize` | number | `100` | For `search`/`random`/`anniversary`: number of assets to request. |
 | `anniversaryDatesBack` | number | `3` | Anniversary: days before today to include. |
@@ -220,6 +241,8 @@ Notes:
 | No thumbnails | Proxy blocked or headers issue | Check network for `/immichtilesslideshow/<id>` responses (should be 200). Ensure Immich reachable from MagicMirror host. |
 | Tiles overlap modules | Make the mosaic darker | Increase `overlayOpacity` (e.g., `0.4–0.6`). |
 | Choppy motion | Too many large tiles or tiny device | Lower `updateInterval` frequency, reduce `featuredTilesMax`, or set `imageFit: "contain"`. |
+| Black/blank cells in the grid | Aspect-based spans (`tileSpans: true`) exceed grid area, and `dense` packing has no 1×1 tiles left to backfill | Use manual layout with defaults (`autoLayout: false` picks `tileSpans: false` automatically), or force uniform tiles: `tileSpans: false`. |
+| `response.data.assets is not iterable` (Immich v3+) | Module older than v1.0.1 (Immich v3 removed inline album assets) | Update to `v1.0.1` or newer — the module now pages assets via `/search/metadata` on v3. |
 
 ## Raspberry Pi Tips
 
