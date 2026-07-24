@@ -793,9 +793,26 @@ Module.register("MMM-ImmichTileSlideShow", {
   },
 
   _recalculateTiles() {
-    if (!this._container || this.config.autoLayout === false) return;
+    if (!this._container) return;
     // Update CSS variables for layout based on container size
     this._updateLayoutVars();
+    // Manual layout: honor tileCols/tileRows exactly (plus a small buffer for
+    // smooth swaps); trim any surplus DOM tiles left over from initial fill.
+    if (this.config.autoLayout === false) {
+      const cols = Math.max(1, Number(this.config.tileCols) || 3);
+      const rows = Math.max(1, Number(this.config.tileRows) || 2);
+      const needed = cols * rows;
+      this._trimTileCapacity(needed);
+      const added = this._ensureTileCapacity(needed);
+      if (added > 0 && this.images) {
+        for (let i = this.tileEls.length - added; i < this.tileEls.length; i++) {
+          const tile = this.tileEls[i];
+          const media = (this.images && this.images.length) ? this._nextImage() : this._placeholderImage(i);
+          this._applyTile(tile, media);
+        }
+      }
+      return;
+    }
     const m = this._computeLayoutMetrics();
     if (!m) return;
     let needed;
@@ -898,24 +915,29 @@ Module.register("MMM-ImmichTileSlideShow", {
       el.style.willChange = 'transform';
       return;
     }
-    // Manual layout: respect tileCols/tileRows and auto-calc gap (min 8)
+    // Manual layout: honor tileCols/tileRows exactly. The base CSS uses
+    // grid-template-columns: repeat(auto-fill, minmax(--tile-min, 1fr)), which
+    // ignores the requested column count and would auto-fill more tiles when
+    // the viewport is wider than --tile-min. Override the template inline so
+    // e.g. tileCols:1, tileRows:1 renders one full-viewport tile.
     if (this.config.autoLayout === false) {
       const cols = Math.max(1, Number(this.config.tileCols) || 3);
       const rows = Math.max(1, Number(this.config.tileRows) || 2);
       const minGap = 8;
-      // Start with minimum gap to find a feasible tile size, then recompute gap to fully fit width
-      let tileMin = Math.floor((w - (cols - 1) * minGap) / cols);
-      tileMin = Math.max(100, Math.min(640, tileMin));
-      let gapPx = cols > 1 ? Math.floor((w - cols * tileMin) / (cols - 1)) : minGap;
-      gapPx = Math.max(minGap, Math.min(64, gapPx));
-      // Compute row height to fit exactly the requested number of base rows
-      let rowSize = Math.floor((h - (rows - 1) * gapPx) / rows);
-      if (!Number.isFinite(rowSize) || rowSize <= 0) rowSize = Math.round(tileMin * 0.8);
+      let gapPx = Math.max(minGap, Math.min(64, Math.round(w * 0.008)));
+      const tileW = Math.max(1, Math.floor((w - (cols - 1) * gapPx) / cols));
+      const rowSize = Math.max(1, Math.floor((h - (rows - 1) * gapPx) / rows));
       el.style.setProperty('--mmmitss-gap', `${gapPx}px`);
-      el.style.setProperty('--tile-min', `${tileMin}px`);
+      el.style.setProperty('--tile-min', `${tileW}px`);
       el.style.setProperty('--row-size', `${rowSize}px`);
+      // Force exact grid geometry (overrides the auto-fill template)
+      el.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      el.style.gridAutoRows = `${rowSize}px`;
       return;
     }
+    // Clear any inline manual-layout overrides when returning to auto layout
+    if (el.style.gridTemplateColumns) el.style.gridTemplateColumns = '';
+    if (el.style.gridAutoRows) el.style.gridAutoRows = '';
     // Auto layout heuristics
     let targetCols;
     if (this.config.enableScrolling) {

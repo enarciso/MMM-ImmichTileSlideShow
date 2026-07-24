@@ -188,8 +188,22 @@ See `examples/config.example.js` for another snippet.
 The module negotiates Immich API version and sets up internal proxies for thumbnails and (when enabled) basic video playback. Supported modes: memory, album, search, random, anniversary. It filters/sorts assets server-side and streams optimized URLs to the client for smooth tile updates.
 
 - Images: served via module proxy using Immich thumbnails/previews. In `lightweightMode`, the proxy prefers the smaller `thumbnail` first and falls back to `preview`/original. Otherwise, it tries `preview` first, then `thumbnail`, then original.
-- Videos: served as Immich encoded video (`/assets/{id}/video`) with a poster from the image thumbnail
+- Videos: served as Immich encoded video (v1.x: `/assets/{id}/video`; v3+: `/assets/{id}/video/playback`) with a poster from the image thumbnail
 - HTTP caching: the internal proxy forwards and preserves ETag/If-Modified-Since headers for images and videos where applicable. Clients can reuse cached responses efficiently.
+
+### Required API-key permissions
+
+When creating the Immich API key, grant these scopes (Immich → Account → API Keys):
+
+| Scope | Used for |
+| --- | --- |
+| `album.read` | List albums and fetch album metadata (`/albums`, `/albums/{id}`) |
+| `asset.read` | Album asset listing, search, memories, asset metadata (`/search/metadata`, `/search/random`, `/search/smart`, `/memories`, `/assets/{id}`) |
+| `asset.view` | Thumbnails and video playback (`/assets/{id}/thumbnail`, `/assets/{id}/video/playback`) |
+| `asset.download` | Original image/video (used as fallback when thumbnail/preview 404s) |
+| `memory.read` | Memory Lane mode (`mode: "memory"`) |
+
+For pre-v3 Immich servers, `asset.read` covers thumbnails/originals as well — the `asset.view` / `asset.download` split was introduced in v3.
 
 Notes:
 - Video support uses Immich's encoded video endpoint via the module's proxy. Depending on your Immich version and codec support on your device, playback may fall back to showing the poster image.
