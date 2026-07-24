@@ -37,6 +37,12 @@ Module.register("MMM-ImmichTileSlideShow", {
     useFullscreenBelow: true,
     // Auto layout tiles based on viewport/container size
     autoLayout: true,
+    // Whether to stretch tiles across multiple grid cells based on image aspect
+    // (portraits become row-span 2, landscapes col-span 2, panoramas col-span 3).
+    // null = auto: on for autoLayout, off for manual layout (avoids blank cells
+    // when the sum of spans exceeds tileCols*tileRows). true = always span.
+    // false = uniform 1×1 tiles (images crop via imageFit).
+    tileSpans: null,
 
     // Slideshow behavior
     updateInterval: 10000, // ms - how often to rotate a tile
@@ -756,6 +762,18 @@ Module.register("MMM-ImmichTileSlideShow", {
   },
 
   _applySpansForRatio(tile, ratio) {
+    // Respect tileSpans config: when disabled (explicitly false, or null in
+    // manual layout), keep every tile at 1×1 so a fixed cols×rows grid can't
+    // develop blank cells from rows spilling into cells the auto-placer can't
+    // backfill. imageFit: "cover" crops portraits/landscapes to fill the cell.
+    const spansEnabled = this.config.tileSpans === true
+      || (this.config.tileSpans !== false && this.config.autoLayout !== false);
+    if (!spansEnabled) {
+      tile.style.gridColumn = '';
+      tile.style.gridRow = '';
+      tile.dataset.ratio = String(ratio);
+      return;
+    }
     let colSpan = 1;
     let rowSpan = 1;
     if (ratio >= 2.0) { // panorama

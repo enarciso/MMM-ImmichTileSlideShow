@@ -121,6 +121,7 @@ See `examples/config.example.js` for another snippet.
 | `autoLayout` | boolean | `true` | Automatically adjusts tile count and gap based on screen/container size. Set to `false` to use advanced manual layout. |
 | `tileRows` | number | `2` | Manual layout rows when `autoLayout=false`. Also acts as a hard override when `autoLayout=true` and `enableScrolling=true`. |
 | `tileCols` | number | `3` | Manual layout cols when `autoLayout=false`. Also acts as a hard override when `autoLayout=true` and `enableScrolling=true`. |
+| `tileSpans` | boolean\|null | `null` | Whether tiles stretch across multiple cells based on image aspect (portraits become row-span 2, landscapes col-span 2, panoramas col-span 3). `null` = auto: on for `autoLayout=true`, off for `autoLayout=false` (avoids blank cells in a fixed grid). `true` = always span. `false` = uniform 1×1 tiles; images crop via `imageFit`. |
 | `tileGapPx` | number | — | Deprecated. Gap is automatically calculated. |
 | `imageFit` | string | `"cover"` | How images fit within tiles: `"cover"` or `"contain"`. |
 | `useFullscreenBelow` | boolean | `true` | If `true`, renders as a fullscreen background in `fullscreen_below` (no `position` needed; `header` not shown). If `false`, renders inline inside the module region. |
