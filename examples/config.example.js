@@ -1,41 +1,107 @@
 // modules/MMM-ImmichTileSlideShow/examples/config.example.js
+//
+// MMM-ImmichTileSlideShow — v2 configuration examples.
+// Copy ONE of the blocks below into the `modules: []` array of your
+// MagicMirror config/config.js. Each example is complete on its own.
+
+/* ─────────────────────────────────────────────────────────────
+ * 1. Minimal — mosaic of your Immich "memories", zero tuning
+ * ───────────────────────────────────────────────────────────── */
 {
   module: "MMM-ImmichTileSlideShow",
-  // Inline rendering example (set useFullscreenBelow: false)
+  config: {
+    immich: {
+      url: "http://your-immich-host:2283",
+      apiKey: "<YOUR_API_KEY>",
+      source: "memory"
+    }
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * 2. Digital picture frame — one full-screen photo at a time
+ * ───────────────────────────────────────────────────────────── */
+{
+  module: "MMM-ImmichTileSlideShow",
+  config: {
+    mode: "frame",
+    interval: 15000,
+    transition: "fade",
+    captions: { fields: ["date", "album"] },
+    immich: {
+      url: "http://your-immich-host:2283",
+      apiKey: "<YOUR_API_KEY>",
+      source: "album",
+      album: "Family",        // album name OR id — auto-detected
+      sort: "random"
+    }
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * 3. Tile wall — uniform 4x3 grid, no blank cells (Raspberry Pi)
+ * ───────────────────────────────────────────────────────────── */
+{
+  module: "MMM-ImmichTileSlideShow",
+  config: {
+    mode: "grid",
+    cols: 4,
+    rows: 3,
+    interval: 10000,
+    dim: 0.15,
+    videos: { maxConcurrent: 1, preload: "none" },
+    performance: { lightweight: true },
+    immich: {
+      url: "http://your-immich-host:2283",
+      apiKey: "<YOUR_API_KEY>",
+      source: "album",
+      album: "MagicMirror",
+      sort: "random"
+    }
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * 4. Full mosaic — bento-box layout with featured tiles
+ * ───────────────────────────────────────────────────────────── */
+{
+  module: "MMM-ImmichTileSlideShow",
+  config: {
+    mode: "mosaic",
+    interval: 8000,
+    dim: 0.35,
+    featured: { min: 2, max: 4, shuffleMinutes: 10 },
+    videos: { ratio: "4:1", placement: "center" },
+    captions: { fields: ["date"] },
+    immich: {
+      url: "http://your-immich-host:2283",
+      apiKey: "<YOUR_API_KEY>",
+      source: "album",
+      album: ["Vacations", "3acc2f44-cfe6-4ace-8267-4c440d124f7c"],
+      sort: "random"
+    }
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * 5. Inline (non-fullscreen) — renders inside a normal region
+ * ───────────────────────────────────────────────────────────── */
+{
+  module: "MMM-ImmichTileSlideShow",
   position: "top_left",
   header: "Immich Tile Slideshow",
   config: {
-    useFullscreenBelow: false,
-    containerHeightPx: 360,
-    autoLayout: true,
-    // Grid
-    // tileRows/tileCols only used when autoLayout=false; gap is auto-calculated
-
-    // Rotation
-    updateInterval: 10000,
-    randomizeTiles: true,
-    initialStaggerMs: 250,
-
-    // Optional captions
-    showCaptions: true,
-    tileInfo: ["title", "date"],
-
-    // Transition
-    transition: "fade", // fade | slide
-    transitionDurationMs: 600,
-
-    // Optional: Immich configuration (not required for placeholders)
-    // Provide your own values to enable Immich integration in a follow-up step
-    immichConfigs: [
-      {
-        url: "https://your-immich-host:2283",
-        apiKey: "<Your Immich API Key>",
-        timeout: 6000,
-        mode: "memory", // memory | album | search | random | anniversary
-        numDaysToInclude: 7,
-        sortImagesBy: "none",
-        sortImagesDescending: false
-      }
-    ]
+    fullscreen: false,
+    heightPx: 360,
+    mode: "grid",
+    cols: 3,
+    rows: 2,
+    scroll: { speed: 18 },
+    immich: {
+      url: "http://your-immich-host:2283",
+      apiKey: "<YOUR_API_KEY>",
+      source: "memory",
+      days: 30
+    }
   }
 }

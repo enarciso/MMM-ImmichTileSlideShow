@@ -1,281 +1,332 @@
 # MMM-ImmichTileSlideShow
 
-A tile-based slideshow for MagicMirror² that displays a configurable grid of images. It is designed to fetch photos and (optionally) videos from [Immich (self-hosted photo app)](https://immich.app/) via the module's `node_helper` and internal proxies, but it also ships with placeholder tiles so it renders out-of-the-box with zero configuration.
+A tile-based photo & video slideshow for MagicMirror², backed by [Immich](https://immich.app/).
 
-Performance note (Raspberry Pi / Chromium): this module requests Immich thumbnails for images and the encoded video stream instead of full originals. For images, it tries `preview` first, then `thumbnail`, and finally falls back to the original if needed. For videos, it uses the encoded video endpoint (v1.x: `/assets/{id}/video`, v3+: `/assets/{id}/video/playback`) with the original as fallback. This significantly reduces bandwidth and CPU usage on low-power devices while remaining robust.
+Pick a **mode**, point it at your Immich server, done:
 
-Supports Immich **v1.94+ through v3.x**. The module auto-detects the server version and picks the right endpoints; on v3+, album listings are fetched via `/search/metadata` and pages stream to the frontend so large albums start rendering immediately.
+```js
+{
+  module: "MMM-ImmichTileSlideShow",
+  config: {
+    mode: "grid", cols: 4, rows: 3,
+    immich: {
+      url: "http://your-immich-host:2283",
+      apiKey: "<YOUR_API_KEY>",
+      source: "album",
+      album: "MagicMirror"
+    }
+  }
+}
+```
 
-- Auto grid layout (auto tile count/gap, fit: cover/contain)
-- Rotates a random tile at a fixed interval with configurable transitions (fade/slide)
-- Optional captions
-- Optional video tiles (experimental): muted, autoplay, loop with a concurrency cap (enabled by default)
-- Optional auto-scrolling to reveal more tiles (credits-style spacing with fewer columns). When autoLayout is true and scrolling is enabled, setting tileCols/tileRows acts as a hard override for columns/rows with automatic gap.
-- Immich integration (memory/album/search/random/anniversary)
+- **Three layout modes** — `frame` (one photo), `grid` (uniform tiles), `mosaic` (bento-box)
+- Rotates tiles on an interval with fade/slide transitions
+- Video tiles with autoplay, muting, and a concurrency cap
+- Optional captions and auto-scrolling
+- Works with **Immich v1.94 → v3.x** (version auto-detected)
+- Renders placeholder tiles with zero config, so you can verify the UI first
+
+> **Upgrading from v1?** The configuration format changed. See [Migrating from v1](#migrating-from-v1).
 
 <img src="public/screenshot.png" alt="Screenshot" width="640" />
 
 ## Installation
 
-Clone into your MagicMirror `modules/` directory:
-
-```
+```bash
 cd ~/MagicMirror/modules
 git clone https://github.com/enarciso/MMM-ImmichTileSlideShow.git MMM-ImmichTileSlideShow
 cd MMM-ImmichTileSlideShow
 npm install
 ```
 
-No dependencies are required to render placeholders. To integrate Immich later, you will provide your Immich URL and API key in the module config.
+Then add a module block to `config/config.js` — start from [Layout modes](#layout-modes) below or [`examples/config.example.js`](examples/config.example.js).
 
-## Quick Start (Minimal Immich config)
+## Layout modes
 
-1) Create an Immich API key in the Immich web app.
-2) Add a minimal configuration that uses “memory” mode:
+`mode` is the one option that shapes everything else. Pick the one matching your intent.
+
+### `mode: "frame"` — digital picture frame
+
+One full-screen photo at a time. No grid math, no featured tiles.
 
 ```js
-{
-  module: "MMM-ImmichTileSlideShow",
-  config: {
-    overlayOpacity: 0.35,
-    immichConfigs: [
-      {
-        url: "http://<your-immich-host>:2283",
-        apiKey: "<YOUR_API_KEY>",
-        timeout: 6000,
-        mode: "memory",
-        numDaysToInclude: 7
-      }
-    ]
-  }
+config: {
+  mode: "frame",
+  interval: 15000,
+  immich: { url: "…", apiKey: "…", source: "album", album: "Family" }
 }
 ```
 
-## Configuration
+### `mode: "grid"` — uniform tile wall
 
-Add this module to your `config/config.js`.
-
-By default it renders as a fullscreen background in `fullscreen_below` (no position needed, header is not shown) and automatically adjusts the number of tiles and gaps to your screen. To render inside a normal region, set `useFullscreenBelow: false` and provide a `position`.
+Exactly `cols` × `rows` equally-sized tiles filling the screen. Images crop to fill (`fit: "cover"`), so there are never blank cells.
 
 ```js
-{
-  module: "MMM-ImmichTileSlideShow",
-  // Fullscreen background mode (default): no position required; header not shown
-  config: {
-    // Mosaic grid (auto layout)
-    autoLayout: true,
-    imageFit: "cover",     // cover | contain
-    overlayOpacity: 0.35,   // 0–1 or 0–100 (percentage) to darken tiles
-
-    // Rotation
-    updateInterval: 10000,
-    randomizeTiles: true,
-    initialStaggerMs: 250,
-
-    // Transition
-    transition: "fade", // fade | slide
-    transitionDurationMs: 600,
-
-    // Captions
-    showCaptions: false,
-    tileInfo: ["date"], // title | date | album
-
-    // Optional: Immich configuration (not required for placeholders)
-    immichConfigs: [
-      {
-        url: "https://your-immich-host:2283",
-        apiKey: "<Your Immich API Key>",
-        timeout: 6000,
-        mode: "memory", // memory | album | search | random | anniversary
-        numDaysToInclude: 7,
-        sortImagesBy: "none",
-        sortImagesDescending: false
-      }
-    ]
-
-    // Optional: Video support (experimental)
-    // enableVideos: true,            // default: true
-    // imageVideoRatio: "4:1",        // images:videos selection ratio
-    // videoPlacement: "center",      // center | any | featured
-    // videoPreferFeatured: true,      // if featured tiles exist, prefer them
-    // videoCenterBand: 0.5,           // center band width (0–1 or 0–100)
-    // videoMaxConcurrent: 1,         // play at most N videos at once
-    // videoAutoplay: true,
-    // videoMuted: true,
-    // videoLoop: true,
-    // videoPreload: "metadata",      // none | metadata | auto
-
-    // Optional: Scrolling (experimental)
-    // enableScrolling: true,
-    // scrollSpeedPxPerSec: 18,
-  }
+config: {
+  mode: "grid",
+  cols: 4,
+  rows: 3,
+  immich: { url: "…", apiKey: "…", source: "album", album: "MagicMirror" }
 }
 ```
 
-See `examples/config.example.js` for another snippet.
-
-### Layout modes
-
-Two ways to lay out tiles — pick one:
-
-**Auto layout (`autoLayout: true`, the default)** — chooses column count and tile size from viewport width. Portraits become row-span 2, landscapes col-span 2, and panoramas col-span 3 for a bento-box mosaic. Best when you want a dense, visually varied grid across many screen sizes.
-
-**Manual layout (`autoLayout: false`)** — you specify exactly `tileCols` × `tileRows` and the grid fills the viewport with that many uniform tiles. In this mode `tileSpans` defaults to `false`, so every tile is 1×1 and `imageFit` crops portraits/landscapes to fill (no blank cells). Best when you want big, predictable tiles or few-tile "digital picture frame" layouts.
-
-Recipes for a 16:9 monitor:
+Sizing guide for a 16:9 monitor:
 
 | Look | Config |
 |---|---|
-| One full-screen photo | `autoLayout: false, tileCols: 1, tileRows: 1` |
-| Two big side-by-side | `autoLayout: false, tileCols: 2, tileRows: 1` |
-| Six large tiles | `autoLayout: false, tileCols: 3, tileRows: 2` |
-| Twelve medium tiles | `autoLayout: false, tileCols: 4, tileRows: 3` |
-| Auto mosaic (default) | `autoLayout: true` |
-| Manual grid with aspect spans | `autoLayout: false, tileSpans: true` (may leave blank cells if spans exceed grid area) |
+| Two big side-by-side | `cols: 2, rows: 1` |
+| Six large tiles | `cols: 3, rows: 2` |
+| Twelve medium tiles | `cols: 4, rows: 3` |
+| Fifteen smaller tiles | `cols: 5, rows: 3` |
+
+### `mode: "mosaic"` — bento-box (default)
+
+Column count adapts to the viewport, and tiles stretch by image aspect: portraits span 2 rows, landscapes 2 columns, panoramas 3. A few "featured" tiles are enlarged near the center.
+
+```js
+config: {
+  mode: "mosaic",
+  featured: { min: 2, max: 4 },
+  immich: { url: "…", apiKey: "…", source: "memory" }
+}
+```
+
+> Mosaic is the densest, most visually varied layout. If you want big, predictable tiles, use `grid`.
 
 ## Options
 
-| Name | Type | Default | Description |
-|------|------|---------|-------------|
-| `debug` | boolean | `false` | Enables extra logs and shows a small on-screen status label. |
-| `overlayOpacity` | number | `0.25` | Darken overlay over the mosaic. Accepts `0–1` or `0–100` (percentage). |
-| `autoLayout` | boolean | `true` | Automatically adjusts tile count and gap based on screen/container size. Set to `false` to use advanced manual layout. |
-| `tileRows` | number | `2` | Manual layout rows when `autoLayout=false`. Also acts as a hard override when `autoLayout=true` and `enableScrolling=true`. |
-| `tileCols` | number | `3` | Manual layout cols when `autoLayout=false`. Also acts as a hard override when `autoLayout=true` and `enableScrolling=true`. |
-| `tileSpans` | boolean\|null | `null` | Whether tiles stretch across multiple cells based on image aspect (portraits become row-span 2, landscapes col-span 2, panoramas col-span 3). `null` = auto: on for `autoLayout=true`, off for `autoLayout=false` (avoids blank cells in a fixed grid). `true` = always span. `false` = uniform 1×1 tiles; images crop via `imageFit`. |
-| `tileGapPx` | number | — | Deprecated. Gap is automatically calculated. |
-| `imageFit` | string | `"cover"` | How images fit within tiles: `"cover"` or `"contain"`. |
-| `useFullscreenBelow` | boolean | `true` | If `true`, renders as a fullscreen background in `fullscreen_below` (no `position` needed; `header` not shown). If `false`, renders inline inside the module region. |
-| `containerHeightPx` | number | `360` | Inline mode only: fixed height for the grid (px). Set to `0` to let CSS/parent control the height. |
-| `updateInterval` | number | `10000` | Milliseconds between tile swaps. |
-| `initialStaggerMs` | number | `250` | Stagger timing for initial tile fill (ms). |
-| `randomizeTiles` | boolean | `true` | If true, rotates a random tile each interval; otherwise cycles deterministically. |
-| `transition` | string | `"fade"` | Tile swap animation: `"fade"` or `"slide"`. |
-| `transitionDurationMs` | number | `600` | Animation duration (ms). |
-| `showCaptions` | boolean | `false` | Show caption overlay. |
-| `tileInfo` | array | `["date"]` | Caption fields: any of `"title"`, `"date"`, `"album"`. |
-| `featuredAuto` | boolean | `true` | Automatically picks a few larger (2x2) tiles near the center. |
-| `featuredTilesMin` | number | `2` | Used when `featuredAuto=false`: minimum number of featured tiles. |
-| `featuredTilesMax` | number | `3` | Used when `featuredAuto=false`: maximum number of featured tiles. |
-| `featuredShuffleMinutes` | number | `10` | Periodically reshuffle which tiles are featured. Set `0` to disable. |
-| `featuredCenterBand` | number | `0.5` | Used when `featuredAuto=false`: center band where featured tiles are placed. Fraction `0–1` or percent `0–100`. |
-| `validImageFileExtensions` | string | `"jpg,jpeg,png,gif,webp,heic"` | Filter by allowed extensions (server-side). |
-| `enableVideos` | boolean | `true` | Allow Immich video assets to appear as tiles. |
-| `imageVideoRatio` | string/number | `"4:1"` | Deterministic cadence of images vs. videos (images:videos). Pattern repeats (e.g., `image,image,image,image,video`). Accepts `"4:1"` or a number `4` (interpreted as `4:1`). |
-| `videoPlacement` | string | `"center"` | Where to place video tiles: `"center"`, `"featured"`, or `"any"`. |
-| `videoPreferFeatured` | boolean | `true` | Prefer current featured tiles for video playback when available. |
-| `videoCenterBand` | number | `null` | Center band for video placement; defaults to `featuredCenterBand` when `null`. Accepts fraction `0–1` or percent `0–100`. |
-| `validVideoFileExtensions` | string | `"mp4,mov,m4v,webm,avi,mkv,3gp"` | Video extensions to include (server-side). |
-| `videoMaxConcurrent` | number | `1` | Maximum number of simultaneously playing videos. |
-| `videoAutoplay` | boolean | `true` | Autoplay videos if allowed by browser policy. |
-| `videoMuted` | boolean | `true` | Mute videos (required for most autoplay policies). |
-| `videoLoop` | boolean | `true` | Loop videos. |
-| `videoPreload` | string | `"metadata"` | HTML5 `preload` behavior for video elements. |
-| `enableScrolling` | boolean | `false` | When true, the mosaic scrolls upward automatically to reveal more tiles (infinite). |
-| `scrollSpeedPxPerSec` | number | `18` | Vertical scroll speed in pixels per second. |
-| `immichConfigs` | array | `[]` | Immich connection settings array. Provide `url`, `apiKey`, and `mode`. |
-| `activeImmichConfigIndex` | number | `0` | Index into `immichConfigs` to use. |
-| `lightweightMode` | boolean | `false` | Prefers smaller Immich thumbnails for images (via the module proxy) and falls back to original if necessary. Other behavior remains similar. |
-| `maxTiles` | number | `160` | Upper bound for the number of tiles kept in the DOM (auto layout may choose fewer). |
-| `sizeCacheMax` | number | `400` | Maximum entries for the client-side image ratio cache. |
-| `sizeCacheTtlMinutes` | number | `30` | Periodically clears the ratio cache to free memory. Set `0` to disable. |
+Grouped options accept `true`, `false`, **or** an object of settings — so `videos: true` and `videos: { maxConcurrent: 2 }` are both valid.
 
-### Immich `immichConfigs[]` items
+### Layout
 
 | Name | Type | Default | Description |
-|------|------|---------|-------------|
-| `url` | string | — | Immich base URL (e.g., `https://host:2283`). |
-| `apiKey` | string | — | Immich API key (created in Immich Web). |
-| `timeout` | number | `6000` | Request timeout in ms. |
-| `mode` | string | `"memory"` | One of: `memory`, `album`, `search`, `random`, `anniversary`. |
-| `numDaysToInclude` | number | `7` | For `memory` mode: days including today to include. |
-| `albumId` | string/array | `null` | For `album` mode: album ID or array of IDs. Take these from the Immich album URL (`/albums/<id>`). When both `albumId` and `albumName` are set, `albumId` wins. |
-| `albumName` | string/array | `null` | For `album` mode: album name(s), case-sensitive; resolved to ID via `/albums`. Ignored when `albumId` is also set. |
-| `query` | object | `null` | For `search`/`random`/`anniversary`: Immich search payload additions. |
-| `querySize` | number | `100` | For `search`/`random`/`anniversary`: number of assets to request. |
-| `anniversaryDatesBack` | number | `3` | Anniversary: days before today to include. |
-| `anniversaryDatesForward` | number | `3` | Anniversary: days after today to include. |
-| `anniversaryStartYear` | number | `2020` | Anniversary: starting year. |
-| `anniversaryEndYear` | number | `2025` | Anniversary: ending year. |
-| `sortImagesBy` | string | `"none"` | Sorting: `name`, `created`, `modified`, `taken`, `random`, or `none`. |
-| `sortImagesDescending` | boolean | `false` | Reverse sort order. |
+|---|---|---|---|
+| `mode` | string | `"mosaic"` | `"frame"`, `"grid"`, or `"mosaic"`. Determines tile count, sizing, and whether aspect-based spans apply. |
+| `cols` | number | `3` | Columns — `grid` mode only. |
+| `rows` | number | `2` | Rows — `grid` mode only. |
+| `fit` | string | `"cover"` | How media fills a tile: `"cover"` (crop) or `"contain"` (letterbox). |
+| `dim` | number | `0.25` | Darkening overlay so other modules stay readable. `0`–`1` or `0`–`100`. |
+| `fullscreen` | boolean | `true` | Render as a fullscreen background (no `position` needed). Set `false` to render inside a region. |
+| `heightPx` | number | `360` | Grid height when `fullscreen: false`. `0` lets CSS control it. |
 
-## Static Assets
+### Slideshow
 
-- Placeholder image: `/MMM-ImmichTileSlideShow/public/placeholder.svg`
-- Screenshot: `/MMM-ImmichTileSlideShow/public/screenshot.png`
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `interval` | number | `10000` | Milliseconds between tile swaps. |
+| `transition` | string | `"fade"` | `"fade"` or `"slide"`. |
+| `transitionMs` | number | `600` | Transition duration in ms. |
+| `randomize` | boolean | `true` | Swap a random tile each interval instead of cycling in order. |
+| `staggerMs` | number | `250` | Stagger between tiles during the initial fill. |
 
-## Immich Integration
+### Captions
 
-The module negotiates Immich API version and sets up internal proxies for thumbnails and (when enabled) basic video playback. Supported modes: memory, album, search, random, anniversary. It filters/sorts assets server-side and streams optimized URLs to the client for smooth tile updates.
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `captions` | boolean \| object | `false` | `true` to enable with defaults, or `{ fields: [...] }`. |
+| `captions.fields` | array | `["date"]` | Any of `"title"`, `"date"`, `"album"`. |
 
-- Images: served via module proxy using Immich thumbnails/previews. In `lightweightMode`, the proxy prefers the smaller `thumbnail` first and falls back to `preview`/original. Otherwise, it tries `preview` first, then `thumbnail`, then original.
-- Videos: served as Immich encoded video (v1.x: `/assets/{id}/video`; v3+: `/assets/{id}/video/playback`) with a poster from the image thumbnail
-- HTTP caching: the internal proxy forwards and preserves ETag/If-Modified-Since headers for images and videos where applicable. Clients can reuse cached responses efficiently.
+### Featured tiles (mosaic only)
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `featured` | boolean \| object | `true` | Enlarged 2×2 tiles near the center. Automatically disabled in `grid`/`frame`. |
+| `featured.min` / `featured.max` | number | `2` / `3` | How many tiles are featured at once. |
+| `featured.shuffleMinutes` | number | `10` | Reshuffle which tiles are featured. `0` disables. |
+| `featured.band` | number | `0.5` | Center band where featured tiles are placed. `0`–`1` or `0`–`100`. |
+
+### Videos
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `videos` | boolean \| object | `true` | `false` disables video tiles entirely. |
+| `videos.ratio` | string | `"4:1"` | Images-to-videos cadence, e.g. 4 images then 1 video. |
+| `videos.placement` | string | `"center"` | `"center"`, `"featured"`, or `"any"`. |
+| `videos.preferFeatured` | boolean | `true` | Prefer featured tiles for playback when available. |
+| `videos.centerBand` | number | `null` | Center band for placement; falls back to `featured.band`. |
+| `videos.maxConcurrent` | number | `1` | Cap on simultaneously playing videos — **keep low on a Pi**. |
+| `videos.autoplay` / `muted` / `loop` | boolean | `true` | Standard HTML5 video behavior. `muted` is required by most autoplay policies. |
+| `videos.preload` | string | `"metadata"` | `"none"`, `"metadata"`, or `"auto"`. |
+
+### Scrolling
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `scroll` | boolean \| object | `false` | Credits-style upward auto-scroll. |
+| `scroll.speed` | number | `18` | Pixels per second. |
+
+### Media filters & performance
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `imageExtensions` | string | `"jpg,jpeg,png,gif,webp,heic"` | Allowed image extensions (filtered server-side). |
+| `videoExtensions` | string | `"mp4,mov,m4v,webm,avi,mkv,3gp"` | Allowed video extensions. |
+| `performance.lightweight` | boolean | `false` | Prefer smaller Immich thumbnails. Recommended on Raspberry Pi. |
+| `performance.maxTiles` | number | `160` | Upper bound on tiles kept in the DOM (`mosaic` only; `grid`/`frame` use `cols`×`rows`). |
+| `performance.sizeCacheMax` | number | `400` | Max entries in the client-side aspect-ratio cache. |
+| `performance.sizeCacheTtlMinutes` | number | `30` | Clear that cache periodically. `0` disables. |
+| `debug` | boolean | `false` | Verbose logs plus an on-screen status label. |
+
+### Immich
+
+`immich` takes one server object, or an array of them with `activeImmich` selecting the index.
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `url` | string | — | Immich base URL, e.g. `http://host:2283`. **Required.** |
+| `apiKey` | string | — | Immich API key. **Required.** See [permissions](#required-api-key-permissions). |
+| `timeout` | number | `10000` | Request timeout in ms. |
+| `source` | string | `"memory"` | Where photos come from: `memory`, `album`, `search`, `random`, `anniversary`. |
+| `album` | string \| array | — | For `source: "album"`. Accepts album **names or IDs**, single or array — IDs are detected automatically. |
+| `days` | number | `7` | For `source: "memory"`: how many days back to include. |
+| `query` | object | `null` | For `search`/`random`/`anniversary`: extra Immich search payload fields. |
+| `size` | number | `100` | For `search`/`random`/`anniversary`: how many assets to request. |
+| `anniversary.back` / `.forward` | number | `3` | Days around today to include. |
+| `anniversary.startYear` / `.endYear` | number | 5 years ago / this year | Year range to scan. |
+| `sort` | string | `"none"` | `name`, `created`, `modified`, `taken`, `random`, or `none`. |
+| `sortDesc` | boolean | `false` | Reverse the sort order. |
+| `activeImmich` | number | `0` | Top-level: which server in the `immich` array to use. |
+
+## Immich integration
+
+The module detects your Immich version and picks the right endpoints, then proxies media through MagicMirror so no credentials reach the browser.
+
+- **Images** — proxied Immich thumbnails. With `performance.lightweight`, the smaller `thumbnail` is tried first, then `preview`, then the original. Otherwise `preview` first.
+- **Videos** — the encoded video stream (v1.x `/assets/{id}/video`, v3+ `/assets/{id}/video/playback`) with a thumbnail poster.
+- **Large albums** — on Immich v3+, album assets are paged via `/search/metadata` and stream to the browser as they arrive, so a 6,000-photo album starts rendering after the first page instead of blocking.
+- **Caching** — the proxy preserves ETag / If-Modified-Since so the browser can reuse cached media.
 
 ### Required API-key permissions
 
-When creating the Immich API key, grant these scopes (Immich → Account → API Keys):
+When creating the key in Immich (**Account → API Keys**), grant:
 
 | Scope | Used for |
 | --- | --- |
-| `album.read` | List albums and fetch album metadata (`/albums`, `/albums/{id}`) |
-| `asset.read` | Album asset listing, search, memories, asset metadata (`/search/metadata`, `/search/random`, `/search/smart`, `/memories`, `/assets/{id}`) |
-| `asset.view` | Thumbnails and video playback (`/assets/{id}/thumbnail`, `/assets/{id}/video/playback`) |
-| `asset.download` | Original image/video (used as fallback when thumbnail/preview 404s) |
-| `memory.read` | Memory Lane mode (`mode: "memory"`) |
+| `album.read` | List albums and fetch album metadata |
+| `asset.read` | Album listing, search, memories, asset metadata |
+| `asset.view` | Thumbnails and video playback |
+| `asset.download` | Originals (fallback when a thumbnail is missing) |
+| `memory.read` | `source: "memory"` |
 
-For pre-v3 Immich servers, `asset.read` covers thumbnails/originals as well — the `asset.view` / `asset.download` split was introduced in v3.
+On pre-v3 servers `asset.read` also covers thumbnails and originals — the `asset.view` / `asset.download` split arrived in v3.
 
-Notes:
-- Video support uses Immich's encoded video endpoint via the module's proxy. Depending on your Immich version and codec support on your device, playback may fall back to showing the poster image.
-- If no Immich configuration is provided, the module renders placeholders to verify UI.
+## Migrating from v1
 
-## Troubleshooting
+v2 replaces the flat option list with a mode-driven config. **v1 configs are not read** — the module logs an error naming each legacy option and shows it on screen, so nothing fails silently.
 
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| Blank screen | MagicMirror hid the `fullscreen_below` container | In fullscreen mode the module forces visibility; restart MM. Ensure no other module forcibly hides it. For inline mode, set `useFullscreenBelow: false`. |
-| Footer shows “waiting for data” | Slow Immich server / API timeout | Increase `timeout` to `6000–10000`. Verify Immich URL and API key. |
-| “Loaded 0 image(s)” | Album empty, wrong filter, or wrong mode | For album mode, set `albumId` or `albumName` exactly. Add `heic` to `validImageFileExtensions` if needed. Try `mode: "memory"` to validate connectivity. |
-| No thumbnails | Proxy blocked or headers issue | Check network for `/immichtilesslideshow/<id>` responses (should be 200). Ensure Immich reachable from MagicMirror host. |
-| Tiles overlap modules | Make the mosaic darker | Increase `overlayOpacity` (e.g., `0.4–0.6`). |
-| Choppy motion | Too many large tiles or tiny device | Lower `updateInterval` frequency, reduce `featuredTilesMax`, or set `imageFit: "contain"`. |
-| Black/blank cells in the grid | Aspect-based spans (`tileSpans: true`) exceed grid area, and `dense` packing has no 1×1 tiles left to backfill | Use manual layout with defaults (`autoLayout: false` picks `tileSpans: false` automatically), or force uniform tiles: `tileSpans: false`. |
-| `response.data.assets is not iterable` (Immich v3+) | Module older than v1.0.1 (Immich v3 removed inline album assets) | Update to `v1.0.1` or newer — the module now pages assets via `/search/metadata` on v3. |
+Layout options collapse into `mode`:
 
-## Raspberry Pi Tips
+| v1 | v2 |
+|---|---|
+| `autoLayout: true` | `mode: "mosaic"` |
+| `autoLayout: false, tileCols: 4, tileRows: 3` | `mode: "grid", cols: 4, rows: 3` |
+| `autoLayout: false, tileCols: 1, tileRows: 1` | `mode: "frame"` |
+| `tileSpans` | implied by `mode` — remove it |
 
-- Enable the built-in optimizations: `lightweightMode: true`.
-- Consider disabling videos: `enableVideos: false`.
-- If you keep videos, set `videoPreload: "none"` and `videoMaxConcurrent: 1`.
-- Increase rotation interval: `updateInterval: 15000` or higher.
-- Reduce tiles if rendering inline: set a smaller `containerHeightPx`.
-- The module uses Immich thumbnails and encoded streams; if a preview/thumbnail is missing, it falls back to original.
+Renamed options:
 
-## Compatibility
+| v1 | v2 |
+|---|---|
+| `updateInterval` | `interval` |
+| `transitionDurationMs` | `transitionMs` |
+| `randomizeTiles` | `randomize` |
+| `initialStaggerMs` | `staggerMs` |
+| `imageFit` | `fit` |
+| `overlayOpacity` | `dim` |
+| `useFullscreenBelow` | `fullscreen` |
+| `containerHeightPx` | `heightPx` |
+| `validImageFileExtensions` | `imageExtensions` |
+| `validVideoFileExtensions` | `videoExtensions` |
 
-- Tested with MagicMirror² >= 2.1.0
-- No external CDN resources; assets are served via the module itself.
+Flat groups become objects (or plain booleans):
 
-## License
+| v1 | v2 |
+|---|---|
+| `showCaptions: true, tileInfo: ["date"]` | `captions: { fields: ["date"] }` |
+| `featuredAuto` | `featured: true` / `featured: false` |
+| `featuredTilesMin`, `featuredTilesMax` | `featured: { min, max }` |
+| `featuredShuffleMinutes`, `featuredCenterBand` | `featured: { shuffleMinutes, band }` |
+| `enableVideos` | `videos: true` / `videos: false` |
+| `imageVideoRatio`, `videoPlacement`, `videoPreferFeatured`, `videoCenterBand` | `videos: { ratio, placement, preferFeatured, centerBand }` |
+| `videoMaxConcurrent`, `videoAutoplay`, `videoMuted`, `videoLoop`, `videoPreload` | `videos: { maxConcurrent, autoplay, muted, loop, preload }` |
+| `enableScrolling`, `scrollSpeedPxPerSec` | `scroll: { speed }` |
+| `lightweightMode`, `maxTiles`, `sizeCacheMax`, `sizeCacheTtlMinutes` | `performance: { lightweight, maxTiles, sizeCacheMax, sizeCacheTtlMinutes }` |
+| `tileGapPx`, `backgroundColor` | removed — gap and tile backdrop are handled by CSS |
 
-MIT — see LICENSE
+Immich config is now a single object:
 
-### Inline (non-fullscreen) example
+| v1 | v2 |
+|---|---|
+| `immichConfigs: [{ … }]` | `immich: { … }` (array still allowed for multiple servers) |
+| `activeImmichConfigIndex` | `activeImmich` |
+| `mode: "album"` (inside the entry) | `source: "album"` |
+| `albumId: ["<id>"]` / `albumName: "Name"` | `album: "<id or name>"` — auto-detected |
+| `numDaysToInclude` | `days` |
+| `querySize` | `size` |
+| `anniversaryDatesBack`, `anniversaryDatesForward`, `anniversaryStartYear`, `anniversaryEndYear` | `anniversary: { back, forward, startYear, endYear }` |
+| `sortImagesBy` | `sort` |
+| `sortImagesDescending` | `sortDesc` |
+
+### Before / after
 
 ```js
-{
-  module: "MMM-ImmichTileSlideShow",
-  position: "top_left",
-  header: "Immich Tile Slideshow",
-  config: {
-    useFullscreenBelow: false,
-    containerHeightPx: 360,
-    autoLayout: true,
-    enableScrolling: true,
-    scrollSpeedPxPerSec: 18,
-    showCaptions: true
+// v1
+config: {
+  autoLayout: false, tileCols: 4, tileRows: 3,
+  updateInterval: 10000, imageFit: "cover", overlayOpacity: 0.15,
+  lightweightMode: true, enableVideos: true, videoMaxConcurrent: 1,
+  immichConfigs: [{
+    url: "http://immich:2283", apiKey: "KEY", mode: "album",
+    albumName: "MagicMirror", sortImagesBy: "random"
+  }]
+}
+
+// v2
+config: {
+  mode: "grid", cols: 4, rows: 3,
+  interval: 10000, fit: "cover", dim: 0.15,
+  performance: { lightweight: true },
+  videos: { maxConcurrent: 1 },
+  immich: {
+    url: "http://immich:2283", apiKey: "KEY", source: "album",
+    album: "MagicMirror", sort: "random"
   }
 }
 ```
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Red error box listing options | v1 config detected | Follow [Migrating from v1](#migrating-from-v1); each listed option names its v2 replacement. |
+| Blank screen | `fullscreen_below` hidden by another module | Restart MagicMirror; ensure no module hides that region. For inline rendering set `fullscreen: false` and add a `position`. |
+| "Loaded 0 image(s)" | Empty album, wrong `source`, or a name mismatch | Album names are case-sensitive — the log prints all available albums. Try `source: "memory"` to confirm connectivity. |
+| Photos load but tiles stay blank | API key missing `asset.view` | Grant the [required scopes](#required-api-key-permissions). |
+| Videos show only a poster | Codec unsupported by the browser | Expected fallback. Set `videos: false` to skip them, or re-encode in Immich. |
+| Tiles feel too small | Mosaic packs densely by design | Switch to `mode: "grid"` with a low `cols`/`rows`, or `mode: "frame"`. |
+| Black/blank cells in the grid | Aspect spans exceed the grid area | Use `mode: "grid"` (spans are off) instead of `mode: "mosaic"`. |
+| Choppy motion on a Pi | Too many tiles or concurrent videos | Set `performance: { lightweight: true }`, `videos: { maxConcurrent: 1, preload: "none" }`, and raise `interval`. |
+| `response.data.assets is not iterable` | Module older than v1.0.1 on Immich v3 | Update the module — v3 album paging is handled since v1.0.1. |
+
+## Raspberry Pi tips
+
+```js
+config: {
+  mode: "grid", cols: 4, rows: 3,
+  interval: 15000,
+  performance: { lightweight: true },
+  videos: { maxConcurrent: 1, preload: "none" }
+}
+```
+
+For the smoothest result, run MagicMirror in server mode on a stronger machine and point the Pi's browser at it.
+
+## Compatibility
+
+- MagicMirror² ≥ 2.1.0
+- Immich v1.94 → v3.x
+- No external CDN resources; all assets are served by the module
+
+## License
+
+MIT — see [LICENSE](LICENSE)

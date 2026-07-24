@@ -106,3 +106,16 @@
   background: linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0));
   color: #fff;
 }
+
+/* v2 config error notice — shown when a legacy (v1) config is detected */
+.immich-tiles-config-error {
+  white-space: pre-wrap;
+  font: 13px/1.5 monospace;
+  color: #ffb4b4;
+  background: rgba(80, 0, 0, 0.45);
+  border: 1px solid #ff6b6b;
+  border-radius: 6px;
+  padding: 12px 14px;
+  max-width: 640px;
+  text-align: left;
+}

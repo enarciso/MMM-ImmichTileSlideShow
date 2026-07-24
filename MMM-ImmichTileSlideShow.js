@@ -7,7 +7,7 @@
  * Defaults render with placeholder tiles so it works with zero config.
  */
 
-/* global Module, Log */
+/* global Module, Log, MMMITSSConfig */
 
 /**
  * @typedef {Object} TileImage
@@ -24,88 +24,54 @@ Module.register("MMM-ImmichTileSlideShow", {
   requiresVersion: "2.1.0",
 
   /**
-   * Default module configuration
+   * Default module configuration (v2).
+   *
+   * The full option reference lives in configSchema.js — these defaults exist
+   * so MagicMirror's config checker sees known keys. Everything is resolved
+   * into a canonical shape by MMMITSSConfig.normalize() during start().
    */
   defaults: {
-    // Grid layout
-    tileRows: 2, // respected when autoLayout=false
-    tileCols: 3, // respected when autoLayout=false
-    imageFit: "cover", // cover | contain
-    // Non-fullscreen container height in px (set 0 to let CSS control)
-    containerHeightPx: 360,
-    // Render mode: use MagicMirror fullscreen_below background or inline module region
-    useFullscreenBelow: true,
-    // Auto layout tiles based on viewport/container size
-    autoLayout: true,
-    // Whether to stretch tiles across multiple grid cells based on image aspect
-    // (portraits become row-span 2, landscapes col-span 2, panoramas col-span 3).
-    // null = auto: on for autoLayout, off for manual layout (avoids blank cells
-    // when the sum of spans exceeds tileCols*tileRows). true = always span.
-    // false = uniform 1×1 tiles (images crop via imageFit).
-    tileSpans: null,
+    // Layout: "mosaic" (auto bento-box) | "grid" (uniform cols x rows) | "frame" (single tile)
+    mode: "mosaic",
+    cols: 3, // grid mode only
+    rows: 2, // grid mode only
 
-    // Slideshow behavior
-    updateInterval: 10000, // ms - how often to rotate a tile
-    initialStaggerMs: 250, // ms between initial tile fills
-    randomizeTiles: true,
-
-    // Transitions
+    // Slideshow
+    interval: 10000,
     transition: "fade", // fade | slide
-    transitionDurationMs: 600,
+    transitionMs: 600,
+    randomize: true,
+    staggerMs: 250,
+    fit: "cover", // cover | contain
+    dim: 0.25, // 0-1 (or 0-100 as a percentage)
 
-    // Captions
-    showCaptions: false,
-    tileInfo: ["date"], // which metadata to show in caption: title | date | album
+    // Groups: accept true | false | { ...options }
+    captions: false,
+    featured: true, // mosaic only; forced off for grid/frame
+    videos: true,
+    scroll: false,
 
-    // Darken overlay over tiles (0–1 or 0–100 for percentage)
-    overlayOpacity: 0.25,
+    // Rendering
+    fullscreen: true,
+    heightPx: 360, // inline mode only
 
-    // Immich (optional)
-    immichConfigs: [], // array of Immich config objects (similar to MMM-ImmichSlideShow)
-    activeImmichConfigIndex: 0,
-    validImageFileExtensions: "jpg,jpeg,png,gif,webp,heic",
-    validVideoFileExtensions: "mp4,mov,m4v,webm,avi,mkv,3gp",
-    enableVideos: true,
-    imageVideoRatio: "4:1", // images:videos selection ratio
-    // Prefer central area for video playback
-    videoPreferFeatured: true,
-    videoPlacement: "center", // center | any | featured
-    videoCenterBand: null, // null => reuse featuredCenterBand; else 0–1 or 0–100
-    videoAutoplay: true,
-    videoMuted: true,
-    videoLoop: true,
-    videoPreload: "metadata", // none | metadata | auto
-    videoMaxConcurrent: 1,
+    // Media filters
+    imageExtensions: "jpg,jpeg,png,gif,webp,heic",
+    videoExtensions: "mp4,mov,m4v,webm,avi,mkv,3gp",
 
-    // Styling
-    backgroundColor: "#000",
+    // Performance
+    performance: {
+      lightweight: false,
+      maxTiles: 160,
+      sizeCacheMax: 400,
+      sizeCacheTtlMinutes: 30
+    },
 
-    // Scrolling feature
-    enableScrolling: false,
-    scrollSpeedPxPerSec: 18,
+    // Immich: one object, or an array of servers
+    immich: null,
+    activeImmich: 0,
 
-    // Development
     debug: false
-    ,
-    // Featured larger tiles (automatic by default)
-    featuredAuto: true,
-    featuredTilesMin: 2,
-    featuredTilesMax: 3,
-    // Reshuffle featured tiles every N minutes (0 disables)
-    featuredShuffleMinutes: 10,
-    // Center band width (0–1 or 0–100%) where featured tiles are placed
-    featuredCenterBand: 0.5,
-
-    // Lightweight mode (Raspberry Pi optimizations)
-    // When true, the module will prefer smaller Immich thumbnail assets via proxy,
-    // falling back to original if needed. Other behaviors remain similar.
-    lightweightMode: false,
-    // Maximum number of grid tiles to keep in the DOM (auto layout may lower this).
-    maxTiles: 160,
-    // Maximum number of cached image ratios (src -> w/h)
-    sizeCacheMax: 400,
-    // Minutes after which the size cache is cleared (0 disables periodic clearing)
-    sizeCacheTtlMinutes: 30
   },
 
   /**
@@ -114,6 +80,14 @@ Module.register("MMM-ImmichTileSlideShow", {
    */
   getStyles() {
     return [this.file("css/MMM-ImmichTileSlideShow.css")];
+  },
+
+  /**
+   * Shared config normalizer, loaded before the module body runs.
+   * @returns {string[]}
+   */
+  getScripts() {
+    return [this.file("configSchema.js")];
   },
 
   /**
@@ -130,6 +104,16 @@ Module.register("MMM-ImmichTileSlideShow", {
    * Module start lifecycle hook
    */
   start() {
+    // Resolve the v2 config into its canonical shape. A v1 config throws here
+    // with per-key migration guidance rather than silently rendering wrong.
+    try {
+      this.cfg = MMMITSSConfig.normalize(this.config);
+    } catch (e) {
+      this._configError = e.message;
+      Log.error("MMM-ImmichTileSlideShow :: " + e.message);
+      return;
+    }
+
     this.images = /** @type {TileImage[]} */ ([]);
     this.tileEls = [];
     this._rotationTimer = null;
@@ -148,16 +132,17 @@ Module.register("MMM-ImmichTileSlideShow", {
 
     // Lightweight mode: no client-side behavioral changes beyond Immich asset preference.
 
-    this.log("started with config", this.config);
+    this.log("started with config", this.cfg);
 
-    // Ask the helper for data; it should respond with IMMICH_TILES_DATA
+    // Ask the helper for data; it should respond with IMMICH_TILES_DATA.
+    // The helper receives the already-normalized config so both sides agree.
     this.sendSocketNotification("IMMICH_TILES_REGISTER", {
       identifier: this.identifier,
-      config: this.config
+      config: this.cfg
     });
 
     // Create rendering root depending on mode
-    if (this.config.useFullscreenBelow !== false) {
+    if (this.cfg.fullscreen !== false) {
       this._ensureRootFullscreen();
     }
 
@@ -173,7 +158,7 @@ Module.register("MMM-ImmichTileSlideShow", {
     }
 
     // Periodic size cache clearing to bound memory
-    const ttlMin = Number(this.config.sizeCacheTtlMinutes) || 0;
+    const ttlMin = Number(this.cfg.performance.sizeCacheTtlMinutes) || 0;
     if (ttlMin > 0) {
       const periodMs = Math.max(1, ttlMin) * 60 * 1000;
       this._sizeCacheTimer = setInterval(() => {
@@ -188,8 +173,16 @@ Module.register("MMM-ImmichTileSlideShow", {
    * @returns {HTMLElement}
    */
   getDom() {
+    // Surface a config error on-screen — a silent mirror is the worst outcome
+    // of a hard break, so make the required migration impossible to miss.
+    if (this._configError) {
+      const err = document.createElement("div");
+      err.className = "immich-tiles-config-error";
+      err.innerText = this._configError;
+      return err;
+    }
     // If using fullscreen background, return an invisible stub
-    if (this.config.useFullscreenBelow !== false) {
+    if (this.cfg.fullscreen !== false) {
       const stub = document.createElement("div");
       stub.style.display = "none";
       return stub;
@@ -314,7 +307,7 @@ Module.register("MMM-ImmichTileSlideShow", {
     // Inline mode: allow pointer events to interact with module region if needed
     root.style.pointerEvents = 'auto';
     // Set container height if provided
-    const h = Number(this.config.containerHeightPx);
+    const h = Number(this.cfg.heightPx);
     if (Number.isFinite(h) && h > 0 && this._container) {
       this._container.style.height = `${h}px`;
     }
@@ -333,21 +326,21 @@ Module.register("MMM-ImmichTileSlideShow", {
     const wrapper = document.createElement('div');
     wrapper.className = 'immich-tiles-wrapper';
     // Initial gap defaults; will be refined in _updateLayoutVars
-    if (this.config.autoLayout === false) {
+    if (this.cfg.layout.auto === false) {
       wrapper.style.setProperty("--mmmitss-gap", `8px`);
     } else {
       wrapper.style.setProperty("--mmmitss-gap", `clamp(8px, 0.9vw, 18px)`);
     }
-    wrapper.style.setProperty("--mmmitss-bg", this.config.backgroundColor);
-    wrapper.style.setProperty("--mmmitss-fit", this.config.imageFit);
-    wrapper.style.setProperty("--mmmitss-transition", `${this.config.transitionDurationMs}ms`);
-    wrapper.classList.toggle("transition-fade", (this.config.transition || "fade") === "fade");
-    wrapper.classList.toggle("transition-slide", (this.config.transition || "fade") === "slide");
-    if (this.config.debug) wrapper.classList.add('debug');
+    // Tile backdrop is styled purely via CSS in v2 (no backgroundColor option).
+    wrapper.style.setProperty("--mmmitss-fit", this.cfg.fit);
+    wrapper.style.setProperty("--mmmitss-transition", `${this.cfg.transitionMs}ms`);
+    wrapper.classList.toggle("transition-fade", (this.cfg.transition || "fade") === "fade");
+    wrapper.classList.toggle("transition-slide", (this.cfg.transition || "fade") === "slide");
+    if (this.cfg.debug) wrapper.classList.add('debug');
 
     this.tileEls = [];
     // Start with a modest number of tiles; auto capacity adjustments will follow
-    const cap = Number(this.config.maxTiles) || 160;
+    const cap = Number(this.cfg.performance.maxTiles) || 160;
     const baseTiles = Math.min(20, Math.max(10, Math.floor(cap * 0.2)));
     for (let i = 0; i < baseTiles; i++) {
       const tile = this._createTile();
@@ -357,14 +350,7 @@ Module.register("MMM-ImmichTileSlideShow", {
 
     root.appendChild(wrapper);
     // Darkening overlay
-    let ov = Number(this.config.overlayOpacity);
-    if (Number.isFinite(ov)) {
-      if (ov > 1) ov = ov / 100; // allow percentage input
-      ov = Math.max(0, Math.min(1, ov));
-    } else {
-      ov = 0.25;
-    }
-    root.style.setProperty('--mmmitss-overlay', String(ov));
+    root.style.setProperty('--mmmitss-overlay', String(this.cfg.dim));
     const overlay = document.createElement('div');
     overlay.className = 'immich-tiles-overlay';
     overlay.setAttribute('aria-hidden', 'true');
@@ -388,7 +374,7 @@ Module.register("MMM-ImmichTileSlideShow", {
     const total = this.tileEls.length;
     for (let i = 0; i < total; i++) {
       const tile = this.tileEls[i];
-      const delay = i * (this.config.initialStaggerMs || 0);
+      const delay = i * (this.cfg.staggerMs || 0);
       setTimeout(() => {
         const img = usePlaceholders ? this._placeholderImage(i) : this._nextImage();
         this.log('apply initial tile', i, 'placeholder?', usePlaceholders);
@@ -396,7 +382,7 @@ Module.register("MMM-ImmichTileSlideShow", {
       }, delay);
     }
     // After initial fill, choose a few featured tiles near center and enlarge them
-    const after = (total - 1) * (this.config.initialStaggerMs || 0) + 150;
+    const after = (total - 1) * (this.cfg.staggerMs || 0) + 150;
     setTimeout(() => this._applyFeaturedTiles(), after);
   },
 
@@ -409,17 +395,17 @@ Module.register("MMM-ImmichTileSlideShow", {
       if (!this.tileEls.length) return;
       const media = this.images && this.images.length ? this._nextImage() : this._placeholderImage(0);
       let tile = null;
-      if (media && media.kind === 'video' && this.config.enableVideos) {
+      if (media && media.kind === 'video' && this.cfg.videos.enabled) {
         tile = this._pickTileForVideo();
       }
       if (!tile) {
-        const index = this.config.randomizeTiles
+        const index = this.cfg.randomize
           ? Math.floor(Math.random() * this.tileEls.length)
-          : (Date.now() / this.config.updateInterval) % this.tileEls.length;
+          : (Date.now() / this.cfg.interval) % this.tileEls.length;
         tile = this.tileEls[index];
       }
       this._applyTile(tile, media, true);
-    }, Math.max(1000, this.config.updateInterval));
+    }, Math.max(1000, this.cfg.interval));
   },
 
   /**
@@ -429,7 +415,7 @@ Module.register("MMM-ImmichTileSlideShow", {
   _nextImage() {
     // media-aware selection using image:video ratio
     const hasImages = this._imagePool && this._imagePool.length > 0;
-    const hasVideos = this._videoPool && this._videoPool.length > 0 && this.config.enableVideos;
+    const hasVideos = this._videoPool && this._videoPool.length > 0 && this.cfg.videos.enabled;
     if (!hasImages && !hasVideos) return this._placeholderImage(0);
     const kind = this._selectMediaKind();
     if (kind === 'video' && hasVideos) {
@@ -461,7 +447,7 @@ Module.register("MMM-ImmichTileSlideShow", {
   // No client-side media pool cap; all received media may be used
 
   _parseImageVideoRatio() {
-    const r = this.config.imageVideoRatio;
+    const r = this.cfg.videos.ratio;
     let img = 4, vid = 1;
     if (typeof r === 'string' && r.includes(':')) {
       const parts = r.split(':');
@@ -478,7 +464,7 @@ Module.register("MMM-ImmichTileSlideShow", {
   },
 
   _selectMediaKind() {
-    if (!this.config.enableVideos || !this._videoPool || this._videoPool.length === 0) return 'image';
+    if (!this.cfg.videos.enabled || !this._videoPool || this._videoPool.length === 0) return 'image';
     if (!this._imagePool || this._imagePool.length === 0) return 'video';
     const w = this._parseImageVideoRatio();
     const total = (w.image || 0) + (w.video || 0);
@@ -523,15 +509,15 @@ Module.register("MMM-ImmichTileSlideShow", {
       this._activeVideoCount = Math.max(0, this._activeVideoCount - 1);
     }
 
-    if (image.kind === 'video' && this.config.enableVideos) {
+    if (image.kind === 'video' && this.cfg.videos.enabled) {
       if (!vidEl) {
         vidEl = document.createElement('video');
         vidEl.className = 'immich-tile-video';
-        vidEl.muted = !!this.config.videoMuted;
-        vidEl.loop = !!this.config.videoLoop;
+        vidEl.muted = !!this.cfg.videos.muted;
+        vidEl.loop = !!this.cfg.videos.loop;
         vidEl.playsInline = true;
-        vidEl.autoplay = !!this.config.videoAutoplay;
-        vidEl.preload = String(this.config.videoPreload || 'metadata');
+        vidEl.autoplay = !!this.cfg.videos.autoplay;
+        vidEl.preload = String(this.cfg.videos.preload || 'metadata');
         // place into media container
         const media = tile.querySelector('.immich-tile-media') || tile;
         media.appendChild(vidEl);
@@ -542,8 +528,8 @@ Module.register("MMM-ImmichTileSlideShow", {
       // hide the background image layer
       imgEl.style.backgroundImage = image.posterSrc ? `url('${image.posterSrc}')` : '';
       // Play with concurrency guard
-      const canPlay = this._activeVideoCount < Number(this.config.videoMaxConcurrent || 1);
-      if (canPlay && this.config.videoAutoplay) {
+      const canPlay = this._activeVideoCount < Number(this.cfg.videos.maxConcurrent || 1);
+      if (canPlay && this.cfg.videos.autoplay) {
         // Attempt playback
         vidEl.play().then(() => {
           this._activeVideoCount++;
@@ -559,7 +545,7 @@ Module.register("MMM-ImmichTileSlideShow", {
     }
 
     // Caption
-    if (this.config.showCaptions) {
+    if (this.cfg.captions.enabled) {
       const text = this._buildCaption(image);
       if (text) {
         capEl.textContent = text;
@@ -579,7 +565,7 @@ Module.register("MMM-ImmichTileSlideShow", {
       // eslint-disable-next-line no-unused-expressions
       void tile.offsetWidth;
       tile.classList.add("swap");
-      setTimeout(() => tile.classList.remove("swap"), Math.max(200, this.config.transitionDurationMs));
+      setTimeout(() => tile.classList.remove("swap"), Math.max(200, this.cfg.transitionMs));
     }
 
     // Adjust mosaic spans by orientation
@@ -602,7 +588,7 @@ Module.register("MMM-ImmichTileSlideShow", {
    * Utility log wrapper honoring config.debug
    */
   log(...args) {
-    if (this.config.debug && typeof Log !== "undefined" && Log.log) {
+    if (this.cfg.debug && typeof Log !== "undefined" && Log.log) {
       Log.log("[MMM-ImmichTileSlideShow]", ...args);
     }
   },
@@ -633,7 +619,7 @@ Module.register("MMM-ImmichTileSlideShow", {
   _setDebugText(text) {
     const el = this._root && this._root.querySelector('.immich-tiles-debug');
     if (!el) return;
-    if (this.config.debug) {
+    if (this.cfg.debug) {
       el.textContent = `MMM-ImmichTileSlideShow · ${text}`;
       el.style.display = 'block';
     } else {
@@ -651,16 +637,16 @@ Module.register("MMM-ImmichTileSlideShow", {
     if (!this._container || !this.tileEls || !this.tileEls.length) return null;
 
     // Prefer featured tiles if available and allowed
-    if (this.config.videoPlacement === 'featured' || this.config.videoPreferFeatured) {
+    if (this.cfg.videos.placement === 'featured' || this.cfg.videos.preferFeatured) {
       const featured = Array.from(this._container.querySelectorAll('.immich-tile.featured'));
       if (featured.length) {
         const idx = Math.floor(Math.random() * featured.length);
         return featured[idx];
       }
-      if (this.config.videoPlacement === 'featured') return null; // no featured available
+      if (this.cfg.videos.placement === 'featured') return null; // no featured available
     }
 
-    if (this.config.videoPlacement === 'any') return null;
+    if (this.cfg.videos.placement === 'any') return null;
 
     // Center band selection
     const band = this._resolveCenterBand();
@@ -676,7 +662,7 @@ Module.register("MMM-ImmichTileSlideShow", {
 
   _resolveCenterBand() {
     // Use explicit videoCenterBand if provided; otherwise fall back to automatic band
-    let band = this.config.videoCenterBand;
+    let band = this.cfg.videos.centerBand;
     if (band === null || band === undefined || band === '') {
       band = this._autoCenterBand();
     }
@@ -692,7 +678,7 @@ Module.register("MMM-ImmichTileSlideShow", {
    * @returns {string}
    */
   _buildCaption(image) {
-    const items = Array.isArray(this.config.tileInfo) ? this.config.tileInfo : [String(this.config.tileInfo || "")];
+    const items = Array.isArray(this.cfg.captions.fields) ? this.cfg.captions.fields : [String(this.cfg.captions.fields || "")];
     const parts = [];
     for (const key of items) {
       const k = String(key).toLowerCase().trim();
@@ -766,8 +752,7 @@ Module.register("MMM-ImmichTileSlideShow", {
     // manual layout), keep every tile at 1×1 so a fixed cols×rows grid can't
     // develop blank cells from rows spilling into cells the auto-placer can't
     // backfill. imageFit: "cover" crops portraits/landscapes to fill the cell.
-    const spansEnabled = this.config.tileSpans === true
-      || (this.config.tileSpans !== false && this.config.autoLayout !== false);
+    const spansEnabled = this.cfg.layout.spans === true;
     if (!spansEnabled) {
       tile.style.gridColumn = '';
       tile.style.gridRow = '';
@@ -816,9 +801,9 @@ Module.register("MMM-ImmichTileSlideShow", {
     this._updateLayoutVars();
     // Manual layout: honor tileCols/tileRows exactly (plus a small buffer for
     // smooth swaps); trim any surplus DOM tiles left over from initial fill.
-    if (this.config.autoLayout === false) {
-      const cols = Math.max(1, Number(this.config.tileCols) || 3);
-      const rows = Math.max(1, Number(this.config.tileRows) || 2);
+    if (this.cfg.layout.auto === false) {
+      const cols = Math.max(1, Number(this.cfg.layout.cols) || 3);
+      const rows = Math.max(1, Number(this.cfg.layout.rows) || 2);
       const needed = cols * rows;
       this._trimTileCapacity(needed);
       const added = this._ensureTileCapacity(needed);
@@ -834,14 +819,14 @@ Module.register("MMM-ImmichTileSlideShow", {
     const m = this._computeLayoutMetrics();
     if (!m) return;
     let needed;
-    if (this.config.enableScrolling) {
+    if (this.cfg.scroll.enabled) {
       // Credits-like: keep only visible rows + a few extra rows buffered
       const extraRows = 4;
-      needed = Math.min(Number(this.config.maxTiles) || 160, (m.cols * (m.rows + extraRows)));
+      needed = Math.min(Number(this.cfg.performance.maxTiles) || 160, (m.cols * (m.rows + extraRows)));
     } else {
       const bufferScreens = 1; // minimal buffer
       const buffer = Math.max(2, Math.floor(m.count * 0.15));
-      needed = Math.min(Number(this.config.maxTiles) || 160, (m.count * bufferScreens) + buffer);
+      needed = Math.min(Number(this.cfg.performance.maxTiles) || 160, (m.count * bufferScreens) + buffer);
     }
     const added = this._ensureTileCapacity(needed);
     if (added > 0 && this.images) {
@@ -914,33 +899,14 @@ Module.register("MMM-ImmichTileSlideShow", {
     const h = (root && (root.clientHeight || root.offsetHeight)) || (el.clientHeight || el.offsetHeight) || 0;
     if (!w || !h) return;
     const aspect = w / h;
-    // Hard override: when autoLayout=true AND enableScrolling=true, allow tileCols/tileRows to force layout
-    if (this.config.autoLayout !== false && this.config.enableScrolling && (Number(this.config.tileCols) || Number(this.config.tileRows))) {
-      const cols = Math.max(1, Number(this.config.tileCols) || 1);
-      const minGap = 8;
-      let tileMin = Math.floor((w - (cols - 1) * minGap) / cols);
-      tileMin = Math.max(140, Math.min(640, tileMin));
-      let gapPx = cols > 1 ? Math.floor((w - cols * tileMin) / (cols - 1)) : minGap;
-      gapPx = Math.max(minGap, Math.min(64, gapPx));
-      // rows handling: honor tileRows if provided, otherwise choose a pleasing row size based on tileMin
-      const rowsCfg = Number(this.config.tileRows);
-      let rowSize = rowsCfg && rowsCfg > 0 ? Math.floor((h - (rowsCfg - 1) * gapPx) / rowsCfg) : Math.round(tileMin * 0.85);
-      if (!Number.isFinite(rowSize) || rowSize <= 0) rowSize = Math.round(tileMin * 0.85);
-      el.style.setProperty('--mmmitss-gap', `${gapPx}px`);
-      el.style.setProperty('--tile-min', `${tileMin}px`);
-      el.style.setProperty('--row-size', `${rowSize}px`);
-      // Ensure transform optimizations for scrolling
-      el.style.willChange = 'transform';
-      return;
-    }
-    // Manual layout: honor tileCols/tileRows exactly. The base CSS uses
-    // grid-template-columns: repeat(auto-fill, minmax(--tile-min, 1fr)), which
-    // ignores the requested column count and would auto-fill more tiles when
-    // the viewport is wider than --tile-min. Override the template inline so
-    // e.g. tileCols:1, tileRows:1 renders one full-viewport tile.
-    if (this.config.autoLayout === false) {
-      const cols = Math.max(1, Number(this.config.tileCols) || 3);
-      const rows = Math.max(1, Number(this.config.tileRows) || 2);
+    // Fixed layout ("grid" and "frame"): honor cols/rows exactly. The base CSS
+    // uses grid-template-columns: repeat(auto-fill, minmax(--tile-min, 1fr)),
+    // which ignores the requested column count and would auto-fill more tiles
+    // when the viewport is wider than --tile-min. Override the template inline
+    // so mode:"frame" renders one full-viewport tile.
+    if (this.cfg.layout.auto === false) {
+      const cols = Math.max(1, Number(this.cfg.layout.cols) || 3);
+      const rows = Math.max(1, Number(this.cfg.layout.rows) || 2);
       const minGap = 8;
       let gapPx = Math.max(minGap, Math.min(64, Math.round(w * 0.008)));
       const tileW = Math.max(1, Math.floor((w - (cols - 1) * gapPx) / cols));
@@ -951,6 +917,8 @@ Module.register("MMM-ImmichTileSlideShow", {
       // Force exact grid geometry (overrides the auto-fill template)
       el.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
       el.style.gridAutoRows = `${rowSize}px`;
+      // grid + scroll is a valid combination; keep the transform hint
+      if (this.cfg.scroll.enabled) el.style.willChange = 'transform';
       return;
     }
     // Clear any inline manual-layout overrides when returning to auto layout
@@ -958,7 +926,7 @@ Module.register("MMM-ImmichTileSlideShow", {
     if (el.style.gridAutoRows) el.style.gridAutoRows = '';
     // Auto layout heuristics
     let targetCols;
-    if (this.config.enableScrolling) {
+    if (this.cfg.scroll.enabled) {
       // Credits-like: 1–2 columns with bigger gaps
       targetCols = (w >= 1200 ? 2 : 1);
       const gapPx = Math.round(Math.min(40, Math.max(18, w * 0.018)));
@@ -1001,24 +969,21 @@ Module.register("MMM-ImmichTileSlideShow", {
    */
   _applyFeaturedTiles() {
     // In credits-like scrolling mode, skip featured tiles for cleaner layout
-    if (this.config.enableScrolling) return;
+    if (this.cfg.scroll.enabled) return;
+    if (!this.cfg.featured.enabled) return;
     if (!this.tileEls || this.tileEls.length < 6) return;
-    let count;
-    if (this.config.featuredAuto !== false) {
-      // Pick ~12% of tiles as featured (2x2), clamped between 1 and 6
-      const base = Math.round((this._container ? this._container.children.length : this.tileEls.length) * 0.12);
-      count = Math.max(1, Math.min(6, base));
-    } else {
-      const min = Math.max(0, Number(this.config.featuredTilesMin) || 2);
-      const max = Math.max(min, Number(this.config.featuredTilesMax) || (min + 1));
-      count = Math.min(max, Math.max(min, Math.floor(Math.random() * (max - min + 1)) + min));
-    }
+
+    // v2: featured count is always min..max. Defaults (2..3) match the old
+    // "auto" heuristic closely, so the inverted featuredAuto flag is gone.
+    const min = this.cfg.featured.min;
+    const max = this.cfg.featured.max;
+    const count = min + Math.floor(Math.random() * (max - min + 1));
+    if (count <= 0) return;
 
     // Compute a central band (portion of the children list) to place featured tiles
     const total = this._container ? this._container.children.length : this.tileEls.length;
-    let band = (this.config.featuredAuto === false) ? Number(this.config.featuredCenterBand) : this._autoCenterBand();
+    let band = Number(this.cfg.featured.band);
     if (!Number.isFinite(band) || band <= 0) band = this._autoCenterBand();
-    if (band > 1) band = band / 100; // allow percentage
     band = Math.min(1, Math.max(0.1, band));
     const bandCount = Math.max(1, Math.floor(total * band));
     const bandStart = Math.max(0, Math.floor((total - bandCount) / 2));
@@ -1086,7 +1051,7 @@ Module.register("MMM-ImmichTileSlideShow", {
    * Set up (or refresh) periodic featured tiles reshuffle.
    */
   _scheduleFeaturedShuffle() {
-    const minutes = Number(this.config.featuredShuffleMinutes || 0);
+    const minutes = Number(this.cfg.featured.shuffleMinutes || 0);
     if (!minutes || minutes <= 0) {
       if (this._featuredTimer) { clearInterval(this._featuredTimer); this._featuredTimer = null; }
       return;
@@ -1102,7 +1067,7 @@ Module.register("MMM-ImmichTileSlideShow", {
 
   // --- Scrolling feature ---
   _maybeStartScroll() {
-    if (this.config.enableScrolling) this._startScroll();
+    if (this.cfg.scroll.enabled) this._startScroll();
     else this._stopScroll();
   },
 
@@ -1116,7 +1081,7 @@ Module.register("MMM-ImmichTileSlideShow", {
       if (!this._lastScrollTs) this._lastScrollTs = ts;
       const dt = Math.max(0, ts - this._lastScrollTs);
       this._lastScrollTs = ts;
-      const speed = Math.max(1, Number(this.config.scrollSpeedPxPerSec) || 18);
+      const speed = Math.max(1, Number(this.cfg.scroll.speed) || 18);
       this._scrollOffset += (speed * dt) / 1000;
       // Recycle tiles when we've scrolled past approximately one row
       this._checkInfiniteScrollRecycle();

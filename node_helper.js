@@ -58,20 +58,21 @@ module.exports = NodeHelper.create({
    */
   socketNotificationReceived(notification, payload) {
     if (notification === "IMMICH_TILES_REGISTER") {
+      // The frontend sends an already-normalized v2 config (configSchema.js),
+      // so no defaulting or legacy handling is needed here.
       this.config = payload && payload.config ? payload.config : {};
       Log.info(LOG_PREFIX + "register received");
-      const cfg = this.config || {};
-      const immichCfg = (cfg.immichConfigs && cfg.immichConfigs[cfg.activeImmichConfigIndex || 0]) || {};
+      const immichCfg = activeImmich(this.config) || {};
       dlog(this, "incoming config", {
-        mode: immichCfg.mode,
+        source: immichCfg.source,
         url: immichCfg.url,
         hasApiKey: !!immichCfg.apiKey,
         timeout: immichCfg.timeout,
-        albumName: immichCfg.albumName,
-        albumId: immichCfg.albumId,
-        querySize: immichCfg.querySize
+        albumNames: immichCfg.albumNames,
+        albumIds: immichCfg.albumIds,
+        size: immichCfg.size
       });
-      if (Array.isArray(this.config.immichConfigs) && this.config.immichConfigs.length > 0) {
+      if (activeImmich(this.config)) {
         _loadFromImmichImpl(this).catch((e) => {
           Log.error(LOG_PREFIX + "Immich load failed: " + e.message);
           this._sendInitialImages();
@@ -92,11 +93,10 @@ module.exports = NodeHelper.create({
     /** @type {TileImage[]} */
     let images = [];
 
-    // If Immich is configured, we will implement fetching in a follow-up step.
-    const hasImmich = Array.isArray(this.config?.immichConfigs) && this.config.immichConfigs.length > 0;
-    if (hasImmich) Log.info(LOG_PREFIX + "Immich config detected — falling back to placeholders.");
+    if (activeImmich(this.config)) Log.info(LOG_PREFIX + "Immich config detected — falling back to placeholders.");
 
-    const count = Math.max(12, (this.config.tileRows || 2) * (this.config.tileCols || 3) * 3);
+    const layout = (this.config && this.config.layout) || {};
+    const count = Math.max(12, (layout.rows || 2) * (layout.cols || 3) * 3);
     const base = `/${this.name}/placeholder.svg`;
     for (let i = 0; i < count; i++) {
       images.push({ src: base, title: `Tile ${i + 1}`, kind: 'image' });
@@ -109,28 +109,17 @@ module.exports = NodeHelper.create({
 // ------- Immich integration helpers -------
 
 /**
- * Normalize and fill default values for the active Immich config entry.
+ * Return the active Immich server entry from a normalized v2 config,
+ * or null when no usable server is configured.
+ * @param {object} moduleConfig normalized config
+ * @returns {object|null}
  */
-function normalizeImmichConfig(moduleConfig) {
-  const idx = Number(moduleConfig.activeImmichConfigIndex || 0) || 0;
-  const list = Array.isArray(moduleConfig.immichConfigs) ? moduleConfig.immichConfigs : [];
-  const active = list[idx] || {};
-  const defaults = {
-    mode: 'memory',
-    timeout: 6000,
-    numDaysToInclude: 7,
-    albumId: null,
-    albumName: null,
-    query: null,
-    querySize: 100,
-    anniversaryDatesBack: 3,
-    anniversaryDatesForward: 3,
-    anniversaryStartYear: 2020,
-    anniversaryEndYear: 2025,
-    sortImagesBy: 'none', // name | random | created | modified | taken | none
-    sortImagesDescending: false
-  };
-  return { ...defaults, ...active };
+function activeImmich(moduleConfig) {
+  const list = moduleConfig && Array.isArray(moduleConfig.immich) ? moduleConfig.immich : [];
+  if (!list.length) return null;
+  const idx = Number(moduleConfig.activeImmich) || 0;
+  const entry = list[idx] || list[0];
+  return entry && entry.url && entry.apiKey ? entry : null;
 }
 
 /**
@@ -186,7 +175,7 @@ function _filterAndMap(rawAssets, immichApi, context, validImageSet, validVideoS
     const isVideoByType = type.includes('video');
     const isImageByType = type.includes('image');
     const okImage = hasValidExt(name, validImageSet) || isImageByType;
-    const okVideo = (context.config.enableVideos === true) && (hasValidExt(name, validVideoSet) || isVideoByType);
+    const okVideo = (context.config.videos && context.config.videos.enabled === true) && (hasValidExt(name, validVideoSet) || isVideoByType);
     return okImage || okVideo;
   });
   return filtered.map((img) => {
@@ -222,53 +211,47 @@ function shuffle(list) {
 async function _loadFromImmichImpl(context) {
   // Lazy-require the API dep only when needed
   const immichApi = require('./immichApi.js');
-  const cfg = normalizeImmichConfig(context.config);
-  dlog(context, 'normalized active config', {
-    mode: cfg.mode,
+  const cfg = activeImmich(context.config);
+  if (!cfg) {
+    Log.error(LOG_PREFIX + 'No usable Immich server configured (needs `url` and `apiKey`).');
+    context._sendInitialImages();
+    return;
+  }
+  dlog(context, 'active immich server', {
+    source: cfg.source,
     url: cfg.url,
     timeout: cfg.timeout,
-    albumName: cfg.albumName,
-    albumId: cfg.albumId,
-    querySize: cfg.querySize
+    albumNames: cfg.albumNames,
+    albumIds: cfg.albumIds,
+    size: cfg.size
   });
 
-  // Build valid extensions sets
-  const validImageSet = new Set(
-    (context.config.validImageFileExtensions || 'jpg,jpeg,png,gif,webp')
-      .toLowerCase()
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-  );
-  const validVideoSet = new Set(
-    (context.config.validVideoFileExtensions || 'mp4,mov,m4v,webm,avi,mkv,3gp')
-      .toLowerCase()
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-  );
+  // Extension lists arrive pre-split from configSchema.normalize()
+  const validImageSet = new Set(context.config.imageExtensions || []);
+  const validVideoSet = new Set(context.config.videoExtensions || []);
 
   // toggle immichApi debug passthrough
   immichApi.debugOn = !!(context.config && context.config.debug);
-  // Prefer thumbnail-sized assets when lightweightMode is enabled; fallback to original
-  await immichApi.init({ ...cfg, preferThumbnail: !!(context.config && context.config.lightweightMode) }, context.expressApp, true);
+  // Prefer thumbnail-sized assets in lightweight mode; fallback to original
+  const perf = (context.config && context.config.performance) || {};
+  await immichApi.init({ ...cfg, preferThumbnail: !!perf.lightweight }, context.expressApp, true);
   dlog(context, 'api level resolved', immichApi.apiLevel);
 
   let images = [];
-  if (cfg.mode === 'album') {
-    let albumIds = cfg.albumId;
-    if (cfg.albumName && !cfg.albumId) {
-      const names = Array.isArray(cfg.albumName) ? cfg.albumName : [cfg.albumName];
-      albumIds = await immichApi.findAlbumIds(names);
-      dlog(context, 'findAlbumIds', names, '=>', albumIds);
+  if (cfg.source === 'album') {
+    // `album` accepts IDs and names interchangeably; names resolve via /albums.
+    let albumIds = [...cfg.albumIds];
+    if (cfg.albumNames.length) {
+      const resolved = await immichApi.findAlbumIds(cfg.albumNames);
+      dlog(context, 'findAlbumIds', cfg.albumNames, '=>', resolved);
+      if (resolved && resolved.length) albumIds = albumIds.concat(resolved);
     }
-    if (albumIds) {
-      albumIds = Array.isArray(albumIds) ? albumIds : [albumIds];
+    if (albumIds.length) {
 
       // Progressive delivery: stream pages to the frontend as they arrive so the
       // mirror can start rendering after the first page instead of waiting for
       // the entire album to page in.
-      const sortMode = cfg.sortImagesBy;
+      const sortMode = cfg.sort;
       const needsFinalSort = sortMode === 'name' || sortMode === 'created' || sortMode === 'modified' || sortMode === 'taken';
       let firstPageSent = false;
       const appendedRaw = [];
@@ -313,7 +296,7 @@ async function _loadFromImmichImpl(context) {
         const list = Array.from(map.entries()).map(([name, id]) => `${name} => ${id}`);
         if (list.length > 0) {
           Log.info(LOG_PREFIX + `Available albums (${list.length}): ` + list.join('; '));
-          Log.info(LOG_PREFIX + 'Set `albumName: ["<one of the names above>"]` or `albumId: ["<id>"]` in your config.');
+          Log.info(LOG_PREFIX + 'Set `immich: { source: "album", album: "<name or id from above>" }` in your config.');
         } else {
           Log.warn(LOG_PREFIX + 'No albums returned by Immich API.');
         }
@@ -321,25 +304,25 @@ async function _loadFromImmichImpl(context) {
         Log.warn(LOG_PREFIX + 'Failed to list albums: ' + e.message);
       }
     }
-  } else if (cfg.mode === 'search') {
-    images = await immichApi.searchAssets(cfg.query, cfg.querySize);
+  } else if (cfg.source === 'search') {
+    images = await immichApi.searchAssets(cfg.query, cfg.size);
     dlog(context, 'search assets count', images && images.length);
-  } else if (cfg.mode === 'random') {
-    images = await immichApi.randomSearchAssets(cfg.querySize, cfg.query);
+  } else if (cfg.source === 'random') {
+    images = await immichApi.randomSearchAssets(cfg.size, cfg.query);
     dlog(context, 'random assets count', images && images.length);
-  } else if (cfg.mode === 'anniversary') {
+  } else if (cfg.source === 'anniversary') {
     images = await immichApi.anniversarySearchAssets(
-      cfg.anniversaryDatesBack,
-      cfg.anniversaryDatesForward,
-      cfg.anniversaryStartYear,
-      cfg.anniversaryEndYear,
-      cfg.querySize,
+      cfg.anniversary.back,
+      cfg.anniversary.forward,
+      cfg.anniversary.startYear,
+      cfg.anniversary.endYear,
+      cfg.size,
       cfg.query
     );
     dlog(context, 'anniversary assets count', images && images.length);
   } else {
     // memory lane (default)
-    images = await immichApi.getMemoryLaneAssets(cfg.numDaysToInclude);
+    images = await immichApi.getMemoryLaneAssets(cfg.days);
     dlog(context, 'memory lane assets count', images && images.length);
   }
 
@@ -352,7 +335,7 @@ async function _loadFromImmichImpl(context) {
       const isVideoByType = type.includes('video');
       const isImageByType = type.includes('image');
       const okImage = hasValidExt(name, validImageSet) || isImageByType;
-      const okVideo = (context.config.enableVideos === true) && (hasValidExt(name, validVideoSet) || isVideoByType);
+      const okVideo = (context.config.videos && context.config.videos.enabled === true) && (hasValidExt(name, validVideoSet) || isVideoByType);
       return okImage || okVideo;
     });
     const after = images.length;
@@ -371,7 +354,7 @@ async function _loadFromImmichImpl(context) {
   // No server-side pool cap; all filtered media are returned.
 
   // Sort
-  switch (cfg.sortImagesBy) {
+  switch (cfg.sort) {
     case 'name':
       tiles = sortByKey(tiles, 'title');
       break;
@@ -388,11 +371,11 @@ async function _loadFromImmichImpl(context) {
       // keep API order
       break;
   }
-  if (cfg.sortImagesDescending === true) tiles.reverse();
-  dlog(context, 'sorted tiles', cfg.sortImagesBy, 'descending?', cfg.sortImagesDescending, 'count', tiles && tiles.length);
+  if (cfg.sortDesc === true) tiles.reverse();
+  dlog(context, 'sorted tiles', cfg.sort, 'descending?', cfg.sortDesc, 'count', tiles && tiles.length);
 
   // Send to client
-  Log.info(LOG_PREFIX + `Loaded ${tiles.length} image(s) for mode=${cfg.mode}`);
+  Log.info(LOG_PREFIX + `Loaded ${tiles.length} image(s) for source=${cfg.source}`);
   context.sendSocketNotification('IMMICH_TILES_DATA', { images: tiles });
 }
 
