@@ -177,7 +177,7 @@ Grouped options accept `true`, `false`, **or** an object of settings — so `vid
 | `apiKey` | string | — | Immich API key. **Required.** See [permissions](#required-api-key-permissions). |
 | `timeout` | number | `10000` | Request timeout in ms. |
 | `source` | string | `"memory"` | Where photos come from: `memory`, `album`, `search`, `random`, `anniversary`. |
-| `album` | string \| array | — | For `source: "album"`. Accepts album **names or IDs**, single or array — IDs are detected automatically. |
+| `album` | array \| string | — | For `source: "album"`. Accepts album **names or IDs**, mixed freely. Pass an array to pull from **multiple albums** — their assets are merged into one pool before sorting. A bare string works for a single album. |
 | `days` | number | `7` | For `source: "memory"`: how many days back to include. |
 | `query` | object | `null` | For `search`/`random`/`anniversary`: extra Immich search payload fields. |
 | `size` | number | `100` | For `search`/`random`/`anniversary`: how many assets to request. |

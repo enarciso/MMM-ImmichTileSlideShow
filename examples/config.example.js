@@ -32,7 +32,7 @@
       url: "http://your-immich-host:2283",
       apiKey: "<YOUR_API_KEY>",
       source: "album",
-      album: "Family",        // album name OR id — auto-detected
+      album: ["Family"],      // names and/or ids; add more to pull from several
       sort: "random"
     }
   }
@@ -55,7 +55,7 @@
       url: "http://your-immich-host:2283",
       apiKey: "<YOUR_API_KEY>",
       source: "album",
-      album: "MagicMirror",
+      album: ["MagicMirror"], // add more entries to merge multiple albums
       sort: "random"
     }
   }
