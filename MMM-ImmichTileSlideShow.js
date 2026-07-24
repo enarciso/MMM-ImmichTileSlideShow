@@ -786,12 +786,26 @@ Module.register("MMM-ImmichTileSlideShow", {
       this._resizeDebounce = setTimeout(() => this._recalculateTiles(), 150);
     };
     window.addEventListener('resize', this._onResize);
+    // Also react to layout changes that never fire a window resize: sibling
+    // modules reflowing, the region resizing, or browser chrome appearing.
+    // Observe only the root: its size is driven by the region, whereas the
+    // container's CSS vars are what we write, so observing it could feed back.
+    if (typeof ResizeObserver !== 'undefined' && this._root) {
+      try {
+        this._resizeObserver = new ResizeObserver(this._onResize);
+        this._resizeObserver.observe(this._root);
+      } catch (_) { this._resizeObserver = null; }
+    }
     this._resizeBound = true;
   },
 
   _unbindResize() {
     if (!this._resizeBound) return;
     try { window.removeEventListener('resize', this._onResize); } catch (_) {}
+    if (this._resizeObserver) {
+      try { this._resizeObserver.disconnect(); } catch (_) {}
+      this._resizeObserver = null;
+    }
     this._resizeBound = false;
     this._onResize = null;
   },
@@ -896,9 +910,34 @@ Module.register("MMM-ImmichTileSlideShow", {
     const el = this._container;
     if (!el) return;
     const root = this._root || el.parentElement;
-    const w = (root && (root.clientWidth || root.offsetWidth)) || (el.clientWidth || el.offsetWidth) || 0;
-    const h = (root && (root.clientHeight || root.offsetHeight)) || (el.clientHeight || el.offsetHeight) || 0;
+    let w = (root && (root.clientWidth || root.offsetWidth)) || (el.clientWidth || el.offsetWidth) || 0;
+    let h = (root && (root.clientHeight || root.offsetHeight)) || (el.clientHeight || el.offsetHeight) || 0;
+
+    // In fullscreen the root is `position: absolute; inset: 0`, so its height
+    // resolves against MagicMirror's region — which can be taller than the
+    // window once the document grows (other modules, body padding). Sizing rows
+    // against that overflows the visible area and clips the bottom row, so
+    // clamp to the part of the root actually on screen.
+    if (this.cfg.fullscreen) {
+      const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+      const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+      if (vw && vh && root && typeof root.getBoundingClientRect === 'function') {
+        const r = root.getBoundingClientRect();
+        const visibleW = vw - Math.max(0, r.left);
+        const visibleH = vh - Math.max(0, r.top);
+        if (visibleW > 0) w = Math.min(w, visibleW);
+        if (visibleH > 0) h = Math.min(h, visibleH);
+      }
+    }
+
     if (!w || !h) return;
+
+    // Nothing moved — skip the write. Keeps ResizeObserver from ping-ponging
+    // and makes repeated _recalculateTiles() calls cheap.
+    if (this._lastLayoutW === w && this._lastLayoutH === h) return;
+    this._lastLayoutW = w;
+    this._lastLayoutH = h;
+
     const aspect = w / h;
     // Fixed layout ("grid" and "frame"): honor cols/rows exactly. The base CSS
     // uses grid-template-columns: repeat(auto-fill, minmax(--tile-min, 1fr)),
