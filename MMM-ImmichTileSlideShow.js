@@ -217,6 +217,18 @@ Module.register("MMM-ImmichTileSlideShow", {
       this._setDebugText(`media: ${this._imagePool.length} img, ${this._videoPool.length} vid`);
       this._recalculateTiles();
       this._maybeStartScroll();
+    } else if (notification === "IMMICH_TILES_APPEND" && payload && Array.isArray(payload.images) && payload.images.length) {
+      // Progressive album loading: append subsequent pages to the existing pool
+      // without disturbing rotation or already-rendered tiles.
+      this.log("appending images:", payload.images.length);
+      if (!Array.isArray(this.images)) this.images = [];
+      this.images.push(...payload.images);
+      for (const m of payload.images) {
+        const k = (m && m.kind) || 'image';
+        if (k === 'video') this._videoPool.push(m);
+        else this._imagePool.push(m);
+      }
+      this._setDebugText(`media: ${this._imagePool.length} img, ${this._videoPool.length} vid`);
     }
   },
 

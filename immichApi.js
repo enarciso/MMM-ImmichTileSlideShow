@@ -68,6 +68,21 @@ const immichApi = {
       randomSearch: '/search/random',
       // Use Immich's encoded video stream endpoint to reduce client load
       videoStream: '/assets/{id}/video'
+    },
+    v3_0: {
+      previousVersion: 'v1_133',
+      albums: '/albums',
+      albumInfo: '/albums/{id}',              // v3: metadata only, no inline assets
+      albumAssetsSearch: '/search/metadata',  // POST { albumIds:[id], size, page }
+      memoryLane: '/memories',
+      assetInfo: '/assets/{id}',
+      assetPreview: '/assets/{id}/thumbnail?size=preview',
+      assetDownload: '/assets/{id}/thumbnail?size=thumbnail',
+      assetOriginal: '/assets/{id}/original',
+      serverInfoUrl: '/server/version',
+      search: '/search/smart',
+      randomSearch: '/search/random',
+      videoStream: '/assets/{id}/video/playback' // v3: /video -> /video/playback
     }
   },
 
@@ -122,7 +137,9 @@ const immichApi = {
       }
 
       if (serverVersion.major > -1) {
-        if (serverVersion.major === 1) {
+        if (serverVersion.major >= 3) {
+          this.apiLevel = 'v3_0';
+        } else if (serverVersion.major === 1) {
           if (serverVersion.minor >= 106 && serverVersion.minor < 118) {
             this.apiLevel = 'v1_106';
           } else if (serverVersion.minor < 106) {
@@ -257,16 +274,79 @@ const immichApi = {
     return ids;
   },
 
-  getAlbumAssets: async function (albumId) {
+  /**
+   * Fetch all assets for a single album.
+   * @param {string} albumId
+   * @param {{ onPage?: (items: any[], meta: { page: number, total: number, albumId: string }) => (Promise<void>|void) }} [opts]
+   *   onPage is invoked once per page as soon as it arrives, enabling progressive rendering.
+   */
+  getAlbumAssets: async function (albumId, opts) {
+    const conf = this.apiUrls[this.apiLevel];
+    const onPage = opts && typeof opts.onPage === 'function' ? opts.onPage : null;
+
+    // v3+: assets are no longer inlined in /albums/{id}; page through /search/metadata.
+    if (conf.albumAssetsSearch) {
+      // Fetch album metadata once to tag assets with albumName.
+      let albumName = null;
+      try {
+        const meta = await this.http.get(conf.albumInfo.replace('{id}', albumId), { responseType: 'json' });
+        if (meta.status === 200) albumName = meta.data.albumName || null;
+      } catch (_) { /* non-fatal */ }
+
+      const images = [];
+      let page = 1;
+      // Try large page sizes first; server may cap. Fall back on 400/422.
+      let size = 1000;
+      while (true) {
+        const body = { albumIds: [albumId], size, page };
+        let res;
+        try {
+          res = await this.http.post(conf.albumAssetsSearch, body, { responseType: 'json' });
+        } catch (e) {
+          Log.error(LOG_PREFIX + `Exception (albumAssetsSearch) album=${albumId} page=${page}: ${e.message}`);
+          break;
+        }
+        if (res.status === 400 || res.status === 422) {
+          if (size > 250) { size = size === 1000 ? 500 : 250; continue; }
+          Log.error(LOG_PREFIX + `search/metadata rejected page=${page} size=${size} status=${res.status}`);
+          break;
+        }
+        if (res.status !== 200) {
+          Log.error(LOG_PREFIX + `search/metadata unexpected status ${res.status} ${res.statusText} album=${albumId} page=${page}`);
+          break;
+        }
+        const items = (res.data && res.data.assets && Array.isArray(res.data.assets.items)) ? res.data.assets.items : [];
+        const total = (res.data && res.data.assets && Number(res.data.assets.total)) || 0;
+        if (albumName) items.forEach((img) => (img.albumName = albumName));
+        images.push(...items);
+        if (onPage && items.length) {
+          try { await onPage(items, { page, total, albumId }); } catch (e) { Log.warn(LOG_PREFIX + `onPage error: ${e.message}`); }
+        }
+        if (this.debugOn) Log.info(LOG_PREFIX + `[debug] album ${albumId} page=${page} got=${items.length} total=${total} accum=${images.length}`);
+        const next = res.data && res.data.assets && res.data.assets.nextPage;
+        if (!items.length || !next) break;
+        const nextPageNum = Number(next);
+        if (!Number.isFinite(nextPageNum) || nextPageNum <= page) break;
+        page = nextPageNum;
+      }
+      return images;
+    }
+
+    // Legacy (v1.x): assets are inline on /albums/{id}.
     let images = [];
     try {
-      const response = await this.http.get(this.apiUrls[this.apiLevel].albumInfo.replace('{id}', albumId), { responseType: 'json' });
-      if (response.status === 200) {
+      const response = await this.http.get(conf.albumInfo.replace('{id}', albumId), { responseType: 'json' });
+      if (response.status === 200 && Array.isArray(response.data && response.data.assets)) {
         images = [...response.data.assets];
         if (response.data.albumName) {
           images.forEach((img) => (img.albumName = response.data.albumName));
         }
+        if (onPage && images.length) {
+          try { await onPage(images, { page: 1, total: images.length, albumId }); } catch (e) { Log.warn(LOG_PREFIX + `onPage error: ${e.message}`); }
+        }
         if (this.debugOn) Log.info(LOG_PREFIX + `[debug] album ${albumId} assets: ${images.length}`);
+      } else if (response.status === 200) {
+        Log.error(LOG_PREFIX + `albumInfo response missing assets array; keys=${Object.keys(response.data || {}).join(',')}`);
       } else {
         Log.error(LOG_PREFIX + 'unexpected response (albumInfo)', response.status, response.statusText);
       }
@@ -276,10 +356,15 @@ const immichApi = {
     return images;
   },
 
-  getAlbumAssetsForAlbumIds: async function (albumIds) {
+  /**
+   * Fetch assets across multiple albums sequentially.
+   * @param {string[]} albumIds
+   * @param {{ onPage?: (items: any[], meta: { page: number, total: number, albumId: string }) => (Promise<void>|void) }} [opts]
+   */
+  getAlbumAssetsForAlbumIds: async function (albumIds, opts) {
     let images = [];
     for (const id of albumIds) {
-      const current = await this.getAlbumAssets(id);
+      const current = await this.getAlbumAssets(id, opts);
       if (current && current.length) images = images.concat(current);
     }
     return images;
@@ -291,7 +376,7 @@ const immichApi = {
     today.setHours(0, 0, 0, 0);
     for (let i = 0; i < numDays; i++) {
       const params =
-        this.apiLevel === 'v1_133'
+        (this.apiLevel === 'v1_133' || this.apiLevel === 'v3_0')
           ? { for: today.toISOString(), type: 'on_this_day' }
           : { day: today.getDate(), month: today.getMonth() + 1 };
       try {

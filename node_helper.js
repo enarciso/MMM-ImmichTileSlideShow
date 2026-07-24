@@ -175,6 +175,29 @@ function toTileImage(img, immichApi, isVideo) {
 }
 
 /**
+ * Filter a raw Immich asset list by valid extension/type and map to tile records.
+ * Extracted so progressive per-page emission and the final aggregated path share logic.
+ */
+function _filterAndMap(rawAssets, immichApi, context, validImageSet, validVideoSet) {
+  if (!Array.isArray(rawAssets) || rawAssets.length === 0) return [];
+  const filtered = rawAssets.filter((img) => {
+    const name = img.originalPath || img.originalFileName || '';
+    const type = (img.type || '').toString().toLowerCase();
+    const isVideoByType = type.includes('video');
+    const isImageByType = type.includes('image');
+    const okImage = hasValidExt(name, validImageSet) || isImageByType;
+    const okVideo = (context.config.enableVideos === true) && (hasValidExt(name, validVideoSet) || isVideoByType);
+    return okImage || okVideo;
+  });
+  return filtered.map((img) => {
+    const name = img.originalPath || img.originalFileName || '';
+    const type = (img.type || '').toString().toLowerCase();
+    const isVideo = type.includes('video') || (!type && hasValidExt(name, validVideoSet));
+    return toTileImage(img, immichApi, isVideo);
+  });
+}
+
+/**
  * Sorting helpers
  */
 function sortByKey(list, key) {
@@ -241,8 +264,47 @@ async function _loadFromImmichImpl(context) {
     }
     if (albumIds) {
       albumIds = Array.isArray(albumIds) ? albumIds : [albumIds];
-      images = await immichApi.getAlbumAssetsForAlbumIds(albumIds);
-      dlog(context, 'album assets count', images && images.length);
+
+      // Progressive delivery: stream pages to the frontend as they arrive so the
+      // mirror can start rendering after the first page instead of waiting for
+      // the entire album to page in.
+      const sortMode = cfg.sortImagesBy;
+      const needsFinalSort = sortMode === 'name' || sortMode === 'created' || sortMode === 'modified' || sortMode === 'taken';
+      let firstPageSent = false;
+      const appendedRaw = [];
+
+      const onPage = (items) => {
+        appendedRaw.push(...items);
+        // For sort modes that require the full pool (by name/date), defer emission
+        // until all pages are collected; emit once at the end after sort/reverse.
+        if (needsFinalSort) return;
+        const pageTiles = _filterAndMap(items, immichApi, context, validImageSet, validVideoSet);
+        if (!pageTiles.length) return;
+        if (sortMode === 'random') shuffle(pageTiles);
+        if (!firstPageSent) {
+          firstPageSent = true;
+          Log.info(LOG_PREFIX + `First page ready — sending ${pageTiles.length} tile(s) to frontend`);
+          context.sendSocketNotification('IMMICH_TILES_DATA', { images: pageTiles });
+        } else {
+          dlog(context, `appending ${pageTiles.length} tile(s) to pool`);
+          context.sendSocketNotification('IMMICH_TILES_APPEND', { images: pageTiles });
+        }
+      };
+
+      images = await immichApi.getAlbumAssetsForAlbumIds(albumIds, { onPage });
+      dlog(context, 'album assets total', images && images.length);
+
+      if (needsFinalSort) {
+        // Single terminal emission for date/name sorts — the frontend receives
+        // one fully-sorted set (same UX as before, just after paging completes).
+        // Fall through to the shared sort/emit path below.
+      } else {
+        // Already emitted progressively; suppress the terminal emission by using
+        // the raw appended set for the tail-end no-op path.
+        return; // done — nothing more to do for progressive modes
+      }
+      // For final-sort modes, hand off to the shared path with the accumulated set.
+      images = appendedRaw;
     } else {
       Log.error(LOG_PREFIX + 'Album mode specified but no album found/selected.');
       // Try to help the user by listing available albums
