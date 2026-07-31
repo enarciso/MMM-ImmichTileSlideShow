@@ -319,6 +319,9 @@
       dim: toFraction(raw.dim == null ? 0.25 : raw.dim, 0.25),
 
       fullscreen: raw.fullscreen !== false,
+      // "auto" detects a screen-filling browser; true/false force the fitted
+      // mosaic on or off for setups the detection reads wrong.
+      fitToScreen: raw.fitToScreen === true ? true : (raw.fitToScreen === false ? false : 'auto'),
       heightPx: Number(raw.heightPx) >= 0 ? Number(raw.heightPx) : 360,
 
       imageExtensions: extList(raw.imageExtensions, 'jpg,jpeg,png,gif,webp,heic'),

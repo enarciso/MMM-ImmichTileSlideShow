@@ -110,6 +110,16 @@ When the browser is actually filling the screen — F11, `requestFullscreen()`, 
 - Slots are planned so they cover every cell exactly once: a few 2×2 features near the centre (still honoring `featured.min`/`max`/`band`), some 2×1 and 1×2 blocks for texture, 1×1 for the rest. Exact coverage means no blank cells either.
 - Each photo is matched to a slot whose aspect ratio is close to its own, chosen from a short look-ahead window in the album. Since tiles use `fit: "cover"`, matching shape to slot is what keeps subjects from being cropped or pushed off-centre.
 
+Detection is a heuristic: `--kiosk` and F11 report no fullscreen element, so it compares the viewport against `screen` — strictly on width, loosely on height, since browser chrome (a tab strip survives macOS fullscreen) costs height but never width. If your setup reads wrong, force it:
+
+```js
+config: {
+  mode: "mosaic",
+  fitToScreen: true,   // "auto" (default) | true | false
+  immich: { … }
+}
+```
+
 `tileSize` still applies — it becomes the target cell width the solver aims for. Everything re-solves on resize, and the layout reverts to the flowing auto-fill mosaic if the window leaves fullscreen. Windowed (non-fullscreen) mosaic and `scroll` mosaics are unchanged.
 
 Roughly how many columns you get on a 1920px-wide display (windowed; fullscreen fit solves its own split):
@@ -139,6 +149,7 @@ Grouped options accept `true`, `false`, **or** an object of settings — so `vid
 | `fit` | string | `"cover"` | How media fills a tile: `"cover"` (crop) or `"contain"` (letterbox). |
 | `dim` | number | `0.25` | Darkening overlay so other modules stay readable. `0`–`1` or `0`–`100`. |
 | `fullscreen` | boolean | `true` | Render as a fullscreen background (no `position` needed). Set `false` to render inside a region. |
+| `fitToScreen` | boolean \| `"auto"` | `"auto"` | **`mosaic` only.** Solve an exact grid for the viewport so tiles can't overflow. `"auto"` enables it when the browser fills the screen; `true`/`false` override the detection. |
 | `heightPx` | number | `360` | Grid height when `fullscreen: false`. `0` lets CSS control it. |
 
 ### Slideshow

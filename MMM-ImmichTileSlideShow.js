@@ -54,6 +54,7 @@ Module.register("MMM-ImmichTileSlideShow", {
 
     // Rendering
     fullscreen: true,
+    fitToScreen: "auto", // mosaic only: "auto" detects kiosk/fullscreen; true/false force it
     heightPx: 360, // inline mode only
 
     // Media filters
@@ -1125,13 +1126,22 @@ Module.register("MMM-ImmichTileSlideShow", {
     if (this.cfg.mode !== 'mosaic') return false;
     if (this.cfg.fullscreen === false) return false;
     if (this.cfg.scroll.enabled) return false;
+    // Explicit wins over detection — no heuristic is right on every browser.
+    if (this.cfg.fitToScreen === true) return true;
+    if (this.cfg.fitToScreen === false) return false;
     return this._isScreenFilling();
   },
 
   /**
-   * Fullscreen API covers F11 and requestFullscreen(). Kiosk mode reports no
-   * fullscreen element, so fall back to comparing the viewport against the
-   * screen — a kiosk window matches it apart from device-pixel rounding.
+   * Fullscreen API covers requestFullscreen(); Chromium's F11 and `--kiosk`
+   * report no fullscreen element, so fall back to comparing the viewport
+   * against the screen.
+   *
+   * Tolerances are deliberately lopsided. Browser chrome costs height (a tab
+   * strip survives macOS fullscreen, and a kiosk on a scaled display rounds
+   * off a few px) but never width, so a strict height match rejects exactly
+   * the setups this feature exists for. Width is what distinguishes a
+   * screen-filling window from a windowed one.
    * @returns {boolean}
    */
   _isScreenFilling() {
@@ -1143,8 +1153,11 @@ Module.register("MMM-ImmichTileSlideShow", {
       if (!sw || !sh) return false;
       const vw = window.innerWidth || document.documentElement.clientWidth || 0;
       const vh = window.innerHeight || document.documentElement.clientHeight || 0;
-      // 2% tolerance absorbs rounding and hairline browser chrome.
-      return Math.abs(vw - sw) <= sw * 0.02 && Math.abs(vh - sh) <= sh * 0.02;
+      // `availHeight` already excludes a macOS menu bar or Windows taskbar, so
+      // measure height against whichever bound the window could actually reach.
+      const availH = Number(scr.availHeight) || sh;
+      const budget = Math.min(sh, availH);
+      return Math.abs(vw - sw) <= sw * 0.02 && vh >= budget * 0.85 && vh <= sh * 1.02;
     } catch (_) {
       return false;
     }
