@@ -1209,6 +1209,14 @@ Module.register("MMM-ImmichTileSlideShow", {
     el.style.setProperty('--mmmitss-gap', `${gap}px`);
     el.style.setProperty('--tile-min', `${Math.floor(best.cellW)}px`);
     el.style.setProperty('--row-size', `${Math.floor(best.cellH)}px`);
+    // Pin the box to the measured visible area. `1fr` tracks resolve against
+    // the element's real height, and the wrapper is `height: 100%` of a root
+    // that fills MagicMirror's region — which can be taller than the window
+    // once the document grows. Without this the solved rows are stretched to
+    // region height and the bottom row is pushed off screen, which is the
+    // exact overflow this feature exists to prevent.
+    el.style.width = `${w}px`;
+    el.style.height = `${h}px`;
     el.style.gridTemplateColumns = `repeat(${best.cols}, 1fr)`;
     el.style.gridTemplateRows = `repeat(${best.rows}, 1fr)`;
     // Belt and braces: if anything ever lands outside the planned tracks it
@@ -1222,6 +1230,8 @@ Module.register("MMM-ImmichTileSlideShow", {
   _clearFitPlan(el) {
     this._fitPlan = null;
     if (!el) return;
+    el.style.width = '';
+    el.style.height = '';
     el.style.gridTemplateColumns = '';
     el.style.gridTemplateRows = '';
     el.style.gridAutoRows = '';
