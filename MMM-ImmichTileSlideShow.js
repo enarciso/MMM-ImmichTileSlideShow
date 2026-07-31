@@ -130,6 +130,7 @@ Module.register("MMM-ImmichTileSlideShow", {
     this._sizeCache = new Map();
     this._sizeCacheTimer = null;
     this._initialFilled = false;
+    this._fitPlan = null;
 
     // Lightweight mode: no client-side behavioral changes beyond Immich asset preference.
 
@@ -377,7 +378,7 @@ Module.register("MMM-ImmichTileSlideShow", {
       const tile = this.tileEls[i];
       const delay = i * (this.cfg.staggerMs || 0);
       setTimeout(() => {
-        const img = usePlaceholders ? this._placeholderImage(i) : this._nextImage();
+        const img = usePlaceholders ? this._placeholderImage(i) : this._nextImageForTile(tile);
         this.log('apply initial tile', i, 'placeholder?', usePlaceholders);
         this._applyTile(tile, img);
       }, delay);
@@ -394,16 +395,25 @@ Module.register("MMM-ImmichTileSlideShow", {
     if (this._rotationTimer) clearInterval(this._rotationTimer);
     this._rotationTimer = setInterval(() => {
       if (!this.tileEls.length) return;
-      const media = this.images && this.images.length ? this._nextImage() : this._placeholderImage(0);
+      const pickIndex = () => (this.cfg.randomize
+        ? Math.floor(Math.random() * this.tileEls.length)
+        : Math.floor(Date.now() / this.cfg.interval) % this.tileEls.length);
       let tile = null;
-      if (media && media.kind === 'video' && this.cfg.videos.enabled) {
-        tile = this._pickTileForVideo();
-      }
-      if (!tile) {
-        const index = this.cfg.randomize
-          ? Math.floor(Math.random() * this.tileEls.length)
-          : (Date.now() / this.cfg.interval) % this.tileEls.length;
-        tile = this.tileEls[index];
+      let media;
+      if (this._fitPlan) {
+        // Fitted mosaic: choose the tile first so the photo can be matched to
+        // that slot's aspect ratio.
+        tile = this.tileEls[pickIndex()];
+        media = this.images && this.images.length ? this._nextImageForTile(tile) : this._placeholderImage(0);
+        if (media && media.kind === 'video' && this.cfg.videos.enabled) {
+          tile = this._pickTileForVideo() || tile;
+        }
+      } else {
+        media = this.images && this.images.length ? this._nextImage() : this._placeholderImage(0);
+        if (media && media.kind === 'video' && this.cfg.videos.enabled) {
+          tile = this._pickTileForVideo();
+        }
+        if (!tile) tile = this.tileEls[pickIndex()];
       }
       this._applyTile(tile, media, true);
     }, Math.max(1000, this.cfg.interval));
@@ -433,6 +443,67 @@ Module.register("MMM-ImmichTileSlideShow", {
     const v = this._videoPool[this._nextVideoIndex % this._videoPool.length];
     this._nextVideoIndex = (this._nextVideoIndex + 1) % this._videoPool.length;
     return v;
+  },
+
+  /**
+   * Like _nextImage(), but in a fitted mosaic prefer a photo whose aspect ratio
+   * is close to the tile's slot. `cover` crops whatever doesn't match, so
+   * matching shape to slot is what keeps faces and subjects inside the frame.
+   * @param {HTMLDivElement} tile
+   * @returns {TileImage}
+   */
+  _nextImageForTile(tile) {
+    const media = this._nextImage();
+    if (!this._fitPlan || !tile || !media || media.kind === 'video') return media;
+    const target = parseFloat((tile.dataset && tile.dataset.slotAspect) || '');
+    if (!Number.isFinite(target) || target <= 0) return media;
+    const pool = this._imagePool;
+    if (!pool || pool.length < 4) return media;
+
+    // _nextImage() already advanced past `media`; scan a short window ahead for
+    // a better-shaped photo and consume that one instead. Bounded so rotation
+    // still walks the whole album rather than replaying the same few photos.
+    const WINDOW = Math.min(12, pool.length);
+    let bestIdx = -1;
+    let bestCost = this._ratioCost(media, target);
+    if (bestCost === null) bestCost = Infinity;
+    for (let k = 0; k < WINDOW; k++) {
+      const idx = (this._nextImageIndex + k) % pool.length;
+      const cost = this._ratioCost(pool[idx], target);
+      if (cost !== null && cost < bestCost) {
+        bestCost = cost;
+        bestIdx = idx;
+      }
+    }
+    if (bestIdx < 0) return media;
+    this._nextImageIndex = (bestIdx + 1) % pool.length;
+    return pool[bestIdx];
+  },
+
+  /**
+   * Log-space distance between a photo's aspect ratio and a target, or null
+   * when the ratio isn't known yet.
+   * @returns {number|null}
+   */
+  _ratioCost(media, target) {
+    const ratio = this._mediaRatio(media);
+    if (!ratio) return null;
+    return Math.abs(Math.log(ratio / target));
+  },
+
+  /**
+   * Aspect ratio of a media item from its metadata, falling back to the size
+   * cache populated when tiles measure loaded images.
+   * @returns {number} ratio, or 0 when unknown
+   */
+  _mediaRatio(media) {
+    if (!media) return 0;
+    const w = Number(media.w);
+    const h = Number(media.h);
+    if (w > 0 && h > 0) return w / h;
+    const src = (media.kind === 'video' && media.posterSrc) ? media.posterSrc : media.src;
+    if (src && this._sizeCache && this._sizeCache.has(src)) return this._sizeCache.get(src) || 0;
+    return 0;
   },
 
   _splitMedia() {
@@ -749,6 +820,13 @@ Module.register("MMM-ImmichTileSlideShow", {
   },
 
   _applySpansForRatio(tile, ratio) {
+    // Viewport-fitted mosaic owns tile geometry: the slot plan covers the grid
+    // exactly, so a ratio-driven span here would break that coverage and push
+    // tiles out of view. Keep the ratio for image/slot matching only.
+    if (this._fitPlan) {
+      tile.dataset.ratio = String(ratio);
+      return;
+    }
     // Respect tileSpans config: when disabled (explicitly false, or null in
     // manual layout), keep every tile at 1×1 so a fixed cols×rows grid can't
     // develop blank cells from rows spilling into cells the auto-placer can't
@@ -826,6 +904,22 @@ Module.register("MMM-ImmichTileSlideShow", {
         for (let i = this.tileEls.length - added; i < this.tileEls.length; i++) {
           const tile = this.tileEls[i];
           const media = (this.images && this.images.length) ? this._nextImage() : this._placeholderImage(i);
+          this._applyTile(tile, media);
+        }
+      }
+      return;
+    }
+    // Viewport-fitted mosaic: exactly one tile per planned slot. No buffer —
+    // a surplus tile would land in an implicit track and bleed off-screen.
+    if (this._fitPlan) {
+      const needed = this._fitPlan.slots.length;
+      this._trimTileCapacity(needed);
+      const added = this._ensureTileCapacity(needed);
+      this._applyFitPlanGeometry();
+      if (added > 0) {
+        for (let i = this.tileEls.length - added; i < this.tileEls.length; i++) {
+          const tile = this.tileEls[i];
+          const media = (this.images && this.images.length) ? this._nextImageForTile(tile) : this._placeholderImage(i);
           this._applyTile(tile, media);
         }
       }
@@ -933,12 +1027,28 @@ Module.register("MMM-ImmichTileSlideShow", {
     if (!w || !h) return;
 
     // Nothing moved — skip the write. Keeps ResizeObserver from ping-ponging
-    // and makes repeated _recalculateTiles() calls cheap.
-    if (this._lastLayoutW === w && this._lastLayoutH === h) return;
+    // and makes repeated _recalculateTiles() calls cheap. The fit plan still
+    // has to exist before we can skip: the first pass has nothing cached yet.
+    const needsFitPlan = this._fitEnabled() && !this._fitPlan;
+    if (this._lastLayoutW === w && this._lastLayoutH === h && !needsFitPlan) return;
     this._lastLayoutW = w;
     this._lastLayoutH = h;
 
     const aspect = w / h;
+
+    // Fullscreen mosaic: solve an exact cols x rows grid for the visible
+    // viewport instead of letting auto-fill pick columns against a fixed row
+    // height. Fractional tracks that don't divide the viewport are what push
+    // the last row past the bottom edge, so the fit path uses explicit
+    // `repeat(n, 1fr)` tracks and zero-height implicit tracks — nothing can
+    // spill out of view regardless of how spans pack.
+    if (this._fitEnabled()) {
+      this._buildFitPlan(el, w, h);
+      return;
+    }
+    // Leaving fit mode (e.g. window left fullscreen): drop the plan and its
+    // inline geometry so the auto-fill template below applies again.
+    if (this._fitPlan) this._clearFitPlan(el);
     // Fixed layout ("grid" and "frame"): honor cols/rows exactly. The base CSS
     // uses grid-template-columns: repeat(auto-fill, minmax(--tile-min, 1fr)),
     // which ignores the requested column count and would auto-fill more tiles
@@ -1003,6 +1113,194 @@ Module.register("MMM-ImmichTileSlideShow", {
     el.style.willChange = 'transform';
   },
 
+  /**
+   * True when the viewport-fitted mosaic should drive layout: mode "mosaic",
+   * rendering fullscreen, and the browser really is filling the screen
+   * (F11/`--kiosk`/`--start-fullscreen`). Scrolling mosaics are excluded — a
+   * credits scroll is deliberately taller than the viewport.
+   * @returns {boolean}
+   */
+  _fitEnabled() {
+    if (!this.cfg) return false;
+    if (this.cfg.mode !== 'mosaic') return false;
+    if (this.cfg.fullscreen === false) return false;
+    if (this.cfg.scroll.enabled) return false;
+    return this._isScreenFilling();
+  },
+
+  /**
+   * Fullscreen API covers F11 and requestFullscreen(). Kiosk mode reports no
+   * fullscreen element, so fall back to comparing the viewport against the
+   * screen — a kiosk window matches it apart from device-pixel rounding.
+   * @returns {boolean}
+   */
+  _isScreenFilling() {
+    try {
+      if (document.fullscreenElement || document.webkitFullscreenElement) return true;
+      const scr = window.screen || {};
+      const sw = Number(scr.width) || 0;
+      const sh = Number(scr.height) || 0;
+      if (!sw || !sh) return false;
+      const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+      const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+      // 2% tolerance absorbs rounding and hairline browser chrome.
+      return Math.abs(vw - sw) <= sw * 0.02 && Math.abs(vh - sh) <= sh * 0.02;
+    } catch (_) {
+      return false;
+    }
+  },
+
+  /**
+   * Pick the cols x rows split whose cells best match a square-ish target at a
+   * sensible tile size, then lay explicit tracks and a slot plan on the grid.
+   * @param {HTMLElement} el grid container
+   * @param {number} w visible width in px
+   * @param {number} h visible height in px
+   */
+  _buildFitPlan(el, w, h) {
+    const gap = Math.max(6, Math.min(24, Math.round(Math.min(w, h) * 0.008)));
+    const forced = this.cfg.layout.tileSize;
+    // Aim for cells a touch wider than tall: most photos are landscape, and a
+    // 4:3-ish cell crops them less than a square one.
+    const targetAspect = 4 / 3;
+    const targetW = forced || Math.max(180, Math.min(340, Math.round(w / 7)));
+    const maxTiles = Number(this.cfg.performance.maxTiles) || 160;
+
+    let best = null;
+    for (let cols = 1; cols <= 16; cols++) {
+      const cellW = (w - (cols - 1) * gap) / cols;
+      if (cellW < 90) break;
+      for (let rows = 1; rows <= 16; rows++) {
+        const cellH = (h - (rows - 1) * gap) / rows;
+        if (cellH < 90) break;
+        if (cols * rows > maxTiles) continue;
+        // Log-space distances so "twice as wide" and "half as wide" cost the same.
+        const aspectCost = Math.abs(Math.log((cellW / cellH) / targetAspect));
+        const sizeCost = Math.abs(Math.log(cellW / targetW));
+        const score = aspectCost + sizeCost * 1.2;
+        if (!best || score < best.score) best = { cols, rows, cellW, cellH, score };
+      }
+    }
+    if (!best) best = { cols: 1, rows: 1, cellW: w, cellH: h };
+
+    const slots = this._planFitSlots(best.cols, best.rows);
+    this._fitPlan = {
+      cols: best.cols,
+      rows: best.rows,
+      gap,
+      cellW: best.cellW,
+      cellH: best.cellH,
+      slots
+    };
+
+    el.style.setProperty('--mmmitss-gap', `${gap}px`);
+    el.style.setProperty('--tile-min', `${Math.floor(best.cellW)}px`);
+    el.style.setProperty('--row-size', `${Math.floor(best.cellH)}px`);
+    el.style.gridTemplateColumns = `repeat(${best.cols}, 1fr)`;
+    el.style.gridTemplateRows = `repeat(${best.rows}, 1fr)`;
+    // Belt and braces: if anything ever lands outside the planned tracks it
+    // gets a zero-sized implicit track rather than pushing the grid off-screen.
+    el.style.gridAutoRows = '0px';
+    el.style.gridAutoColumns = '0px';
+    this.log('fit plan', best.cols + 'x' + best.rows, 'slots', slots.length);
+    this._setDebugText(`fit ${best.cols}×${best.rows} · ${slots.length} tiles · cell ${Math.round(best.cellW)}×${Math.round(best.cellH)}`);
+  },
+
+  _clearFitPlan(el) {
+    this._fitPlan = null;
+    if (!el) return;
+    el.style.gridTemplateColumns = '';
+    el.style.gridTemplateRows = '';
+    el.style.gridAutoRows = '';
+    el.style.gridAutoColumns = '';
+    for (const tile of this.tileEls || []) {
+      tile.style.gridArea = '';
+      if (tile.dataset) delete tile.dataset.slotAspect;
+    }
+  },
+
+  /**
+   * Tile a cols x rows board with blocks that cover every cell exactly once:
+   * a few 2x2 features near the centre, some 2x1 / 1x2 pairs for mosaic
+   * texture, and 1x1 for the rest. Exact coverage is what keeps the grid from
+   * overflowing while leaving no blank cells.
+   * @returns {{c: number, r: number, cs: number, rs: number}[]}
+   */
+  _planFitSlots(cols, rows) {
+    const taken = new Array(cols * rows).fill(false);
+    const at = (c, r) => taken[r * cols + c];
+    const free = (c, r, cs, rs) => {
+      if (c + cs > cols || r + rs > rows) return false;
+      for (let y = r; y < r + rs; y++) for (let x = c; x < c + cs; x++) if (at(x, y)) return false;
+      return true;
+    };
+    const claim = (c, r, cs, rs) => {
+      for (let y = r; y < r + rs; y++) for (let x = c; x < c + cs; x++) taken[y * cols + x] = true;
+    };
+
+    const slots = [];
+
+    // Featured 2x2 blocks, biased toward the centre band.
+    let featuredWanted = 0;
+    if (this.cfg.featured.enabled && cols >= 3 && rows >= 3) {
+      const min = this.cfg.featured.min;
+      const max = this.cfg.featured.max;
+      featuredWanted = min + Math.floor(Math.random() * (max - min + 1));
+    }
+    const band = Math.min(1, Math.max(0.1, Number(this.cfg.featured.band) || this._autoCenterBand()));
+    const bandC0 = Math.floor((cols * (1 - band)) / 2);
+    const bandC1 = Math.max(bandC0 + 1, Math.ceil(cols - (cols * (1 - band)) / 2));
+    const bandR0 = Math.floor((rows * (1 - band)) / 2);
+    const bandR1 = Math.max(bandR0 + 1, Math.ceil(rows - (rows * (1 - band)) / 2));
+    for (let i = 0, guard = 0; i < featuredWanted && guard < 200; guard++) {
+      const c = bandC0 + Math.floor(Math.random() * Math.max(1, bandC1 - bandC0));
+      const r = bandR0 + Math.floor(Math.random() * Math.max(1, bandR1 - bandR0));
+      if (!free(c, r, 2, 2)) continue;
+      claim(c, r, 2, 2);
+      slots.push({ c, r, cs: 2, rs: 2, featured: true });
+      i++;
+    }
+
+    // Fill the remainder scan-order. Occasionally widen or heighten a block so
+    // the mosaic keeps varied slot shapes for portrait/landscape photos.
+    const pairChance = 0.28;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (at(c, r)) continue;
+        let cs = 1;
+        let rs = 1;
+        if (Math.random() < pairChance) {
+          if (Math.random() < 0.5 && free(c, r, 2, 1)) cs = 2;
+          else if (free(c, r, 1, 2)) rs = 2;
+        }
+        claim(c, r, cs, rs);
+        slots.push({ c, r, cs, rs, featured: false });
+      }
+    }
+    return slots;
+  },
+
+  /**
+   * Stamp the planned geometry onto the tile elements, one tile per slot.
+   */
+  _applyFitPlanGeometry() {
+    const plan = this._fitPlan;
+    if (!plan || !this._container) return;
+    const { gap, cellW, cellH } = plan;
+    for (let i = 0; i < plan.slots.length && i < this.tileEls.length; i++) {
+      const s = plan.slots[i];
+      const tile = this.tileEls[i];
+      // Explicit placement (not `span` alone) so dense auto-flow can't shuffle
+      // a tile into an implicit track.
+      tile.style.gridArea = `${s.r + 1} / ${s.c + 1} / span ${s.rs} / span ${s.cs}`;
+      tile.classList.toggle('featured', !!s.featured);
+      tile.dataset.featured = s.featured ? '1' : '0';
+      const slotW = s.cs * cellW + (s.cs - 1) * gap;
+      const slotH = s.rs * cellH + (s.rs - 1) * gap;
+      tile.dataset.slotAspect = String(slotW / slotH);
+    }
+  },
+
   _autoCenterBand() {
     // Compute a reasonable center band width based on container aspect ratio
     const el = this._container;
@@ -1021,6 +1319,14 @@ Module.register("MMM-ImmichTileSlideShow", {
   _applyFeaturedTiles() {
     // In credits-like scrolling mode, skip featured tiles for cleaner layout
     if (this.cfg.scroll.enabled) return;
+    // Fitted mosaic: features are part of the slot plan, so a reshuffle means
+    // re-planning the board rather than restyling individual tiles.
+    if (this._fitPlan) {
+      this._fitPlan.slots = this._planFitSlots(this._fitPlan.cols, this._fitPlan.rows);
+      this._recalculateTiles();
+      this._scheduleFeaturedShuffle();
+      return;
+    }
     if (!this.cfg.featured.enabled) return;
     if (!this.tileEls || this.tileEls.length < 6) return;
 
@@ -1079,6 +1385,7 @@ Module.register("MMM-ImmichTileSlideShow", {
    */
   _clearFeaturedTiles() {
     if (!this._container) return;
+    if (this._fitPlan) return; // slot plan reassigns featured tiles wholesale
     const featured = this._container.querySelectorAll('.immich-tile.featured');
     featured.forEach((tile) => {
       tile.classList.remove('featured');

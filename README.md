@@ -101,7 +101,18 @@ config: {
 }
 ```
 
-Roughly how many columns you get on a 1920px-wide display:
+#### Fullscreen fit (automatic)
+
+When the browser is actually filling the screen — F11, `requestFullscreen()`, or Chromium `--kiosk` — mosaic switches to a **viewport-fitted** layout. Instead of filling columns against a fixed row height and letting the last row spill past the bottom edge, it solves an exact `cols × rows` split for the visible area:
+
+- Tracks are `repeat(n, 1fr)`, so the grid always sums to exactly the viewport — no overflow, no clipped bottom row, no bleed past the edges.
+- The tile count is exactly the number of planned slots, with no spare buffer tiles (a spare tile is what used to land off-screen).
+- Slots are planned so they cover every cell exactly once: a few 2×2 features near the centre (still honoring `featured.min`/`max`/`band`), some 2×1 and 1×2 blocks for texture, 1×1 for the rest. Exact coverage means no blank cells either.
+- Each photo is matched to a slot whose aspect ratio is close to its own, chosen from a short look-ahead window in the album. Since tiles use `fit: "cover"`, matching shape to slot is what keeps subjects from being cropped or pushed off-centre.
+
+`tileSize` still applies — it becomes the target cell width the solver aims for. Everything re-solves on resize, and the layout reverts to the flowing auto-fill mosaic if the window leaves fullscreen. Windowed (non-fullscreen) mosaic and `scroll` mosaics are unchanged.
+
+Roughly how many columns you get on a 1920px-wide display (windowed; fullscreen fit solves its own split):
 
 | `tileSize` | Min width | Columns |
 |---|---|---|
@@ -325,7 +336,8 @@ config: {
 | Photos load but tiles stay blank | API key missing `asset.view` | Grant the [required scopes](#required-api-key-permissions). |
 | Videos show only a poster | Codec unsupported by the browser | Expected fallback. Set `videos: false` to skip them, or re-encode in Immich. |
 | Tiles feel too small | Mosaic packs densely by design | Switch to `mode: "grid"` with a low `cols`/`rows`, or `mode: "frame"`. |
-| Black/blank cells in the grid | Aspect spans exceed the grid area | Use `mode: "grid"` (spans are off) instead of `mode: "mosaic"`. |
+| Black/blank cells in the grid | Aspect spans exceed the grid area | In fullscreen/kiosk this can't happen (slots cover the grid exactly). Windowed: use `mode: "grid"` (spans are off) instead of `mode: "mosaic"`. |
+| Tiles bleed past the screen edge in mosaic | Browser isn't actually fullscreen, so the fitted layout is off | Launch Chromium with `--kiosk` (or press F11). Set `debug: true` to see the solved `cols × rows` in the on-screen label. |
 | Tiles overflow the bottom of the screen | Module older than v2.1.1 — the grid was sized against MagicMirror's region, which can be taller than the window | Update the module. v2.1.1 clamps the grid to the visible viewport and recomputes on any resize. |
 | Choppy motion on a Pi | Too many tiles or concurrent videos | Set `performance: { lightweight: true }`, `videos: { maxConcurrent: 1, preload: "none" }`, and raise `interval`. |
 | `response.data.assets is not iterable` | Module older than v1.0.1 on Immich v3 | Update the module — v3 album paging is handled since v1.0.1. |
