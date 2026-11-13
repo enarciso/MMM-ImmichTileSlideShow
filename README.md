@@ -108,7 +108,7 @@ When the browser is actually filling the screen — F11, `requestFullscreen()`, 
 - Tracks are `repeat(n, 1fr)`, so the grid always sums to exactly the viewport — no overflow, no clipped bottom row, no bleed past the edges.
 - The tile count is exactly the number of planned slots, with no spare buffer tiles (a spare tile is what used to land off-screen).
 - Slots are planned so they cover every cell exactly once: a few 2×2 features near the centre (still honoring `featured.min`/`max`/`band`), some 2×1 and 1×2 blocks for texture, 1×1 for the rest. Exact coverage means no blank cells either.
-- Each photo is matched to a slot whose aspect ratio is close to its own, chosen from a short look-ahead window in the album. Since tiles use `fit: "cover"`, matching shape to slot is what keeps subjects from being cropped or pushed off-centre.
+- Each photo is matched to a slot whose aspect ratio is close to its own, chosen from a short look-ahead window in the album. Since tiles use `fit: "cover"`, matching shape to slot is what keeps subjects from being cropped or pushed off-centre. A photo passed over for a better fit is only deferred, never skipped: every photo in the album is still shown once per pass.
 
 Detection is a heuristic: `--kiosk` and F11 report no fullscreen element, so it compares the viewport against `screen` — strictly on width, loosely on height, since browser chrome (a tab strip survives macOS fullscreen) costs height but never width. If your setup reads wrong, force it:
 
@@ -236,7 +236,7 @@ The module detects your Immich version and picks the right endpoints, then proxi
 
 - **Images** — proxied Immich thumbnails. With `performance.lightweight`, the smaller `thumbnail` is tried first, then `preview`, then the original. Otherwise `preview` first.
 - **Videos** — the encoded video stream (v1.x `/assets/{id}/video`, v3+ `/assets/{id}/video/playback`) with a thumbnail poster.
-- **Large albums** — on Immich v3+, album assets are paged via `/search/metadata` and stream to the browser as they arrive, so a 6,000-photo album starts rendering after the first page instead of blocking.
+- **Large albums** — on Immich v3+, album assets are paged via `/search/metadata` and stream to the browser as they arrive, so a 6,000-photo album starts rendering after the first page instead of blocking. With `sort: "random"`, later pages are shuffled into the photos not yet shown, so the slideshow doesn't play the newest page in full before anything older.
 - **Caching** — the proxy preserves ETag / If-Modified-Since so the browser can reuse cached media.
 
 ### Required API-key permissions

@@ -270,7 +270,9 @@ async function _loadFromImmichImpl(context) {
           context.sendSocketNotification('IMMICH_TILES_DATA', { images: pageTiles });
         } else {
           dlog(context, `appending ${pageTiles.length} tile(s) to pool`);
-          context.sendSocketNotification('IMMICH_TILES_APPEND', { images: pageTiles });
+          // `shuffle` asks the frontend to mix this page into the unseen part of
+          // the pool; appending at the end would replay the album page by page.
+          context.sendSocketNotification('IMMICH_TILES_APPEND', { images: pageTiles, shuffle: sortMode === 'random' });
         }
       };
 

@@ -227,8 +227,8 @@ Module.register("MMM-ImmichTileSlideShow", {
       this.images.push(...payload.images);
       for (const m of payload.images) {
         const k = (m && m.kind) || 'image';
-        if (k === 'video') this._videoPool.push(m);
-        else this._imagePool.push(m);
+        if (k === 'video') this._addToPool(this._videoPool, m, this._nextVideoIndex, payload.shuffle);
+        else this._addToPool(this._imagePool, m, this._nextImageIndex, payload.shuffle);
       }
       this._setDebugText(`media: ${this._imagePool.length} img, ${this._videoPool.length} vid`);
     }
@@ -461,15 +461,24 @@ Module.register("MMM-ImmichTileSlideShow", {
     const pool = this._imagePool;
     if (!pool || pool.length < 4) return media;
 
-    // _nextImage() already advanced past `media`; scan a short window ahead for
-    // a better-shaped photo and consume that one instead. Bounded so rotation
-    // still walks the whole album rather than replaying the same few photos.
-    const WINDOW = Math.min(12, pool.length);
+    // _nextImage() already consumed `media` at `cur` and advanced past it. Scan
+    // a short window ahead for a better-shaped photo and swap it into `cur`;
+    // `media` moves into the vacated spot and is shown later in this pass.
+    // Swapping (rather than jumping the cursor past the window) keeps the walk
+    // a permutation of the pool, so every photo is shown once per pass.
+    // Jumping dropped the skipped photos for the whole pass and, because the
+    // pool order is fixed, kept dropping the same ones (mostly portraits in
+    // landscape slots) pass after pass.
+    const cur = (this._nextImageIndex - 1 + pool.length) % pool.length;
+    if (pool[cur] !== media) return media;
+    // Don't scan past the end of the pass: wrapping would defer `media` into
+    // the next pass and pull an already-shown photo forward.
+    const WINDOW = Math.min(12, pool.length - 1 - cur);
     let bestIdx = -1;
     let bestCost = this._ratioCost(media, target);
     if (bestCost === null) bestCost = Infinity;
-    for (let k = 0; k < WINDOW; k++) {
-      const idx = (this._nextImageIndex + k) % pool.length;
+    for (let k = 1; k <= WINDOW; k++) {
+      const idx = cur + k;
       const cost = this._ratioCost(pool[idx], target);
       if (cost !== null && cost < bestCost) {
         bestCost = cost;
@@ -477,8 +486,10 @@ Module.register("MMM-ImmichTileSlideShow", {
       }
     }
     if (bestIdx < 0) return media;
-    this._nextImageIndex = (bestIdx + 1) % pool.length;
-    return pool[bestIdx];
+    const best = pool[bestIdx];
+    pool[bestIdx] = media;
+    pool[cur] = best;
+    return best;
   },
 
   /**
@@ -505,6 +516,25 @@ Module.register("MMM-ImmichTileSlideShow", {
     const src = (media.kind === 'video' && media.posterSrc) ? media.posterSrc : media.src;
     if (src && this._sizeCache && this._sizeCache.has(src)) return this._sizeCache.get(src) || 0;
     return 0;
+  },
+
+  /**
+   * Add one media item to a rotation pool. With `shuffle`, drop it at a random
+   * position among the items the cursor hasn't reached yet (inside-out
+   * Fisher-Yates), so a progressively loaded album stays uniformly random
+   * instead of showing page 1 (the newest assets) in full before anything older.
+   * @param {TileImage[]} pool
+   * @param {TileImage} item
+   * @param {number} cursor index of the next item rotation will show
+   * @param {boolean} shuffle
+   */
+  _addToPool(pool, item, cursor, shuffle) {
+    pool.push(item);
+    if (!shuffle) return;
+    const start = Math.min(Math.max(0, cursor || 0), pool.length - 1);
+    const j = start + Math.floor(Math.random() * (pool.length - start));
+    const last = pool.length - 1;
+    [pool[j], pool[last]] = [pool[last], pool[j]];
   },
 
   _splitMedia() {
