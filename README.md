@@ -187,9 +187,9 @@ Grouped options accept `true`, `false`, **or** an object of settings — so `vid
 | `videos.placement` | string | `"center"` | `"center"`, `"featured"`, or `"any"`. |
 | `videos.preferFeatured` | boolean | `true` | Prefer featured tiles for playback when available. |
 | `videos.centerBand` | number | `null` | Center band for placement; falls back to `featured.band`. |
-| `videos.maxConcurrent` | number | `1` | Cap on simultaneously playing videos — **keep low on a Pi**. |
-| `videos.autoplay` / `muted` / `loop` | boolean | `true` | Standard HTML5 video behavior. `muted` is required by most autoplay policies. |
-| `videos.preload` | string | `"metadata"` | `"none"`, `"metadata"`, or `"auto"`. |
+| `videos.maxConcurrent` | number | `1` | Cap on simultaneously playing videos — **keep low on a Pi**. A video over the cap shows its poster frame and is never downloaded. |
+| `videos.autoplay` / `muted` / `loop` | boolean | `true` | Standard HTML5 video behavior. `muted` is required by most autoplay policies. With `autoplay: false`, videos show their poster frame only. |
+| `videos.preload` | string | `"metadata"` | `"none"`, `"metadata"`, or `"auto"`. Applies only to videos that are playing. |
 
 ### Scrolling
 

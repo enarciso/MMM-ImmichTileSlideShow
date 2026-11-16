@@ -123,7 +123,9 @@ Module.register("MMM-ImmichTileSlideShow", {
     this._nextImageIndex = 0;
     this._nextVideoIndex = 0;
     this._started = false;
-    this._activeVideoCount = 0;
+    // Video elements that are playing or have been asked to play. A Set of the
+    // elements themselves (not a counter) so events can't drift it.
+    this._playingVideos = new Set();
     this._imagePool = [];
     this._videoPool = [];
     this._cadenceIndex = 0;
@@ -596,54 +598,25 @@ Module.register("MMM-ImmichTileSlideShow", {
    */
   _applyTile(tile, image, animate = false) {
     const imgEl = tile.querySelector(".immich-tile-img");
-    let vidEl = tile.querySelector("video.immich-tile-video");
     const capEl = tile.querySelector(".immich-tile-caption");
     if (!imgEl || !capEl) return;
 
-    // Tear down any prior video element if switching kinds
-    if (vidEl && image.kind !== 'video') {
-      try {
-        vidEl.pause();
-        vidEl.removeAttribute('src');
-        vidEl.load();
-      } catch (e) {}
-      vidEl.remove();
-      vidEl = null;
-      this._activeVideoCount = Math.max(0, this._activeVideoCount - 1);
-    }
+    // Every swap retires the tile's current video, if any. A fresh element per
+    // clip means a stale event from the old one can only ever remove the old
+    // element from the playing set, never the new one.
+    this._teardownVideo(tile.querySelector("video.immich-tile-video"));
 
-    if (image.kind === 'video' && this.cfg.videos.enabled) {
-      if (!vidEl) {
-        vidEl = document.createElement('video');
-        vidEl.className = 'immich-tile-video';
-        vidEl.muted = !!this.cfg.videos.muted;
-        vidEl.loop = !!this.cfg.videos.loop;
-        vidEl.playsInline = true;
-        vidEl.autoplay = !!this.cfg.videos.autoplay;
-        vidEl.preload = String(this.cfg.videos.preload || 'metadata');
-        // place into media container
-        const media = tile.querySelector('.immich-tile-media') || tile;
-        media.appendChild(vidEl);
-      }
-      // set sources/poster
-      if (image.posterSrc) vidEl.poster = image.posterSrc;
-      if (vidEl.src !== image.src) vidEl.src = image.src;
-      // hide the background image layer
+    if (image.kind === 'video') {
+      // The poster always goes on the background layer: it is the whole tile
+      // when the video can't play, and the backdrop while a playing one loads.
       imgEl.style.backgroundImage = image.posterSrc ? `url('${image.posterSrc}')` : '';
-      // Play with concurrency guard
-      const canPlay = this._activeVideoCount < Number(this.cfg.videos.maxConcurrent || 1);
-      if (canPlay && this.cfg.videos.autoplay) {
-        // Attempt playback
-        vidEl.play().then(() => {
-          this._activeVideoCount++;
-          vidEl.onended = () => { this._activeVideoCount = Math.max(0, this._activeVideoCount - 1); };
-          vidEl.onpause = () => { this._activeVideoCount = Math.max(0, this._activeVideoCount - 1); };
-        }).catch(() => {
-          // Autoplay may be blocked; show poster background
-        });
+      // Only a video that will actually play gets an element and a src.
+      // Over the cap it stays a poster, so it never downloads or buffers.
+      const cap = Number(this.cfg.videos.maxConcurrent) || 1;
+      if (this.cfg.videos.enabled && this.cfg.videos.autoplay && this._playingVideos.size < cap) {
+        this._playVideoInTile(tile, image);
       }
     } else {
-      // Image mode: set background-image and remove any video
       imgEl.style.backgroundImage = `url('${image.src}')`;
     }
 
@@ -673,6 +646,53 @@ Module.register("MMM-ImmichTileSlideShow", {
 
     // Adjust mosaic spans by orientation
     this._applyMosaicSpans(tile, image);
+  },
+
+  /**
+   * Create a video element in `tile` and start it. The caller has already
+   * checked the concurrency cap. The element is counted as soon as play() is
+   * requested, so two swaps in quick succession can't both slip under the cap
+   * while the first is still loading.
+   * @param {HTMLDivElement} tile
+   * @param {TileImage} image
+   */
+  _playVideoInTile(tile, image) {
+    const vidEl = document.createElement('video');
+    vidEl.className = 'immich-tile-video';
+    vidEl.muted = !!this.cfg.videos.muted;
+    vidEl.loop = !!this.cfg.videos.loop;
+    vidEl.playsInline = true;
+    // No `autoplay` attribute: the browser would start the element on its own
+    // and bypass the cap. Playback is started explicitly below.
+    vidEl.preload = String(this.cfg.videos.preload || 'metadata');
+    if (image.posterSrc) vidEl.poster = image.posterSrc;
+    const release = () => this._playingVideos.delete(vidEl);
+    vidEl.addEventListener('playing', () => { if (vidEl.isConnected) this._playingVideos.add(vidEl); });
+    vidEl.addEventListener('pause', release);
+    vidEl.addEventListener('ended', release);
+    vidEl.addEventListener('error', release);
+    vidEl.src = image.src;
+    (tile.querySelector('.immich-tile-media') || tile).appendChild(vidEl);
+    this._playingVideos.add(vidEl);
+    const p = vidEl.play();
+    // Autoplay can be refused (policy, decode error); the poster stays visible.
+    if (p && typeof p.catch === 'function') p.catch(release);
+  },
+
+  /**
+   * Stop a video element and release everything it holds: its slot under the
+   * concurrency cap, its network connection and its decoded/buffered media.
+   * @param {HTMLVideoElement|null} vidEl
+   */
+  _teardownVideo(vidEl) {
+    if (!vidEl) return;
+    this._playingVideos.delete(vidEl);
+    try {
+      vidEl.pause();
+      vidEl.removeAttribute('src');
+      vidEl.load();
+    } catch (_) {}
+    vidEl.remove();
   },
 
   /**
@@ -706,7 +726,7 @@ Module.register("MMM-ImmichTileSlideShow", {
       try { this._mmObserver.disconnect(); } catch (e) {}
       this._mmObserver = null;
     }
-    this._activeVideoCount = 0;
+    for (const v of Array.from(this._playingVideos || [])) this._teardownVideo(v);
     this._unbindResize();
     if (this._sizeCacheTimer) { try { clearInterval(this._sizeCacheTimer); } catch (_) {} this._sizeCacheTimer = null; }
     // Remove injected root to avoid leakage on restarts
